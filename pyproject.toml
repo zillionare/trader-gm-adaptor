@@ -12,11 +12,7 @@ classifiers=[
     'Intended Audience :: Developers',
     'License :: OSI Approved :: MIT License',
     'Natural Language :: English',
-    'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.6',
-    'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
-    'Programming Language :: Python :: 3.9',
 ]
 packages = [
     { include = "gmtrader" },
@@ -44,6 +40,7 @@ twine  = { version = "^3.3.0", optional = true}
 mkdocs-autorefs = {version = "0.1.1", optional = true}
 pre-commit = {version = "^2.12.0", optional = true}
 toml = {version = "^0.10.2", optional = true}
+livereload = "^2.6.3"
 
 [tool.poetry.extras]
 test = [
