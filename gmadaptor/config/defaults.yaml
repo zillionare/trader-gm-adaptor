@@ -1,0 +1,18 @@
+log_level: INFO
+
+server_info:
+    fake: true
+    ip: 192.168.100.17
+    port: 9000
+    access_token : "ec31c154fc0cbf4ba39eb48689ebcbfaacf8067f"
+
+gm_info:
+    gm_output: "C:\\Projects\\gm-client-workspace\\account_out"
+    - user : jack
+        user_id: 6a89549c-a1df-11ec-aaef-00163e0a4100
+        user_input: "C:\\Projects\\gm-client-workspace\\jack_input1"
+    
+    - user : henry
+        user_id: 1751ebfe-9ec1-11ec-ba58-00163e0a4100
+        henry_input: "C:\\Projects\\gm-client-workspace\\henry_input1"
+    

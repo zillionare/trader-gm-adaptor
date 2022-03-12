@@ -1,6 +1,6 @@
 [tool]
 [tool.poetry]
-name = "zillionare-trader-gm"
+name = "trader-gmadaptor"
 version = "0.1.0"
 homepage = "https://github.com/zillionare/trader-gm-adaptor"
 description = "Skeleton project created by Python Project Wizard (ppw)."
