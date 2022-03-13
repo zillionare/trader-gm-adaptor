@@ -1,151 +1,206 @@
 # -*- coding: utf-8 -*-
 # @Author   : henry
 # @Time     : 2022-03-09 15:08
+import asyncio
+import csv
 import logging
+from time import sleep
+
+import cfg4py
+from cfg4py.config import Config
+from gmadaptor.common.stock_name_conversion import (
+    stockcode_to_joinquant,
+    stockcode_to_myquant,
+)
+from gmadaptor.common.types import BidType, OrderSide
+from gmadaptor.gmclient.csv_utils import (
+    csv_generate_cancel_order,
+    csv_generate_order,
+    csv_get_exec_report_data,
+    csv_get_exec_report_data2,
+    csv_get_order_status,
+    csv_get_order_status_change_data,
+)
+from gmadaptor.gmclient.data_conversion import gm_cash, gm_position
+from gmadaptor.gmclient.wrapper import (
+    get_gm_account_info,
+    get_gm_in_csv_cancelorder,
+    get_gm_in_csv_order,
+    get_gm_out_csv_cash,
+    get_gm_out_csv_execreport,
+    get_gm_out_csv_order_status_change,
+    get_gm_out_csv_orderstatus,
+    get_gm_out_csv_position,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def stockcode_to_joinquant(stock: str):
-    # SHSE, SZSE -> XSHG, XSHE
-    (sec_name, stock_num) = stock.split(".")
-    if sec_name.find("SHSE") != -1:
-        return f"{stock_num}.XSHG"
-    elif sec_name.find("SZSE") != -1:
-        return f"{stock_num}.XSHE"
-    return stock
-
-
-def stockcode_to_myquant(stock: str):
-    # XSHG, XSHE -> SHSE, SZSE
-    (stock_num, sec_name) = stock.split(".")
-    if sec_name.find("XSHG") != -1:
-        return f"SHSE.{stock_num}"
-    elif sec_name.find("XSHE") != -1:
-        return f"SZSE.{stock_num}"
-    return stock
-
-
 def wrapper_get_balance(account_id: str):
     # 查询账户资金，返回cash结构
-    cash = get_cash(account=account_id)
-    print(f"get_cash cash\n{cash}")
-    return cash
+    out_dir = get_gm_out_csv_cash(account_id)
+    if out_dir is None:
+        return {"status": 401, "msg": "no output file found"}
+
+    mycash = None
+    # target csv file has BOM at the begining, using utf-8-sig instead of utf-8
+    with open(out_dir, "r", encoding="utf-8-sig") as csvfile:
+        for row in csv.DictReader(csvfile):
+            mycash = row
+
+    if mycash is None:
+        return {"status": 401, "msg": "no data in cash file"}
+
+    return {"status": 200, "msg": "success", "data": gm_cash(mycash).toDict()}
 
 
 def wrapper_get_positions(account_id: str):
     # 获取登录账户的持仓，如登录多个账户需要指定账户ID
-    #poses = get_positions(account=account_id)
-    #print(f"get_positions\n{poses}")
-    #return poses
+    out_dir = get_gm_out_csv_position(account_id)
+    if out_dir is None:
+        return {"status": 401, "msg": "no output file found"}
+
+    poses = []
+    # target csv file has BOM at the begining, using utf-8-sig instead of utf-8
+    with open(out_dir, "r", encoding="utf-8-sig") as csvfile:
+        for row in csv.DictReader(csvfile):
+            pos = gm_position(row)
+            poses.append(pos.toDict())
+
+    if len(poses) == 0:
+        return {"status": 401, "msg": "no data in position file"}
+
+    return {"status": 200, "msg": "success", "data": poses}
 
 
 def wrapper_buy(account_id: str, security: str, price: float, volume: int):
-    new_code = stockcode_to_myquant(security)
-    """
-    data = order_volume(
-        account=account_id,
-        symbol=new_code,
-        volume=volume,
-        price=price,
-        side=OrderSide_Buy,
-        order_type=OrderType_Limit,
-        position_effect=PositionEffect_Open,
-    )
-    print(f"buy\n{data}")
+    myquant_code = stockcode_to_myquant(security)
 
-    return data
-    """
+    if price is None:
+        logger.info("price not provided in order entrust: %s, %s", account_id, security)
+        return {"status": 401, "msg": "price cannot be None"}
+
+    sid = csv_generate_order(
+        account_id, myquant_code, volume, OrderSide.BUY, BidType.LIMIT, price
+    )
+    if sid is None:
+        return {"status": 401, "msg": "failed to append data to input file"}
+
+    sleep(0.2)
+    rpt_file = get_gm_out_csv_execreport(account_id)
+    print(f"exec report file: {rpt_file}")
+    cid = csv_get_exec_report_data(rpt_file, sid)
+
+    return {"status": 200, "msg": "success", "data": {"cid": cid}}
 
 
 def wrapper_market_buy(
-    account_id: str, security: str, price: float, volume: int, limit_price: float = None
+    account_id: str, security: str, volume: int, limit_price: float = None
 ):
-    new_code = stockcode_to_myquant(security)
-    """
-    data = order_volume(
-        account=account_id,
-        symbol=new_code,
-        volume=volume,
-        side=OrderSide_Buy,
-        order_type=OrderType_Market,
-        position_effect=PositionEffect_Open,
-    )
-    print(f"market price buy\n{data}")
+    myquant_code = stockcode_to_myquant(security)
 
-    return data
-    """
+    # 市价成交暂定价格为0，根据实际客户端调整
+    price = 0
+    sid = csv_generate_order(
+        account_id, myquant_code, volume, OrderSide.BUY, BidType.MARKET, price
+    )
+    if sid is None:
+        return {
+            "status": 401,
+            "msg": "failed to append data to input file, check lock or file",
+        }
+
+    sleep(0.2)
+    rpt_file = get_gm_out_csv_execreport(account_id)
+    print(f"exec report file: {rpt_file}")
+    cid = csv_get_exec_report_data(rpt_file, sid)
+
+    return {"status": 200, "msg": "success", "data": {"cid": cid}}
 
 
 def wrapper_sell(account_id: str, security: str, price: float, volume: int):
-    new_code = stockcode_to_myquant(security)
-    """
-    data = order_volume(
-        account=account_id,
-        symbol=new_code,
-        volume=volume,
-        price=price,
-        side=OrderSide_Sell,
-        order_type=OrderType_Limit,
-        position_effect=PositionEffect_Close,
-    )
-    print(f"sell\n{data}")
+    myquant_code = stockcode_to_myquant(security)
 
-    return data
-    """
+    if price is None:
+        return {"status": 401, "msg": "price cannot be None [sell]"}
+
+    sid = csv_generate_order(
+        account_id, myquant_code, volume, OrderSide.SELL, BidType.LIMIT, price
+    )
+    if sid is None:
+        return {
+            "status": 401,
+            "msg": "failed to append data to input file, check lock or file",
+        }
+
+    sleep(0.2)
+    rpt_file = get_gm_out_csv_execreport(account_id)
+    print(f"exec report file: {rpt_file}")
+    cid = csv_get_exec_report_data(rpt_file, sid)
+
+    return {"status": 200, "msg": "success", "data": {"cid": cid}}
 
 
 def wrapper_market_sell(
     account_id: str, security: str, volume: int, limit_price: float = None
 ):
-    new_code = stockcode_to_myquant(security)
-    """
-    data = order_volume(
-        account=account_id,
-        symbol=new_code,
-        volume=volume,
-        side=OrderSide_Sell,
-        order_type=OrderType_Market,
-        position_effect=PositionEffect_Close,
-    )
-    print(f"market price sell\n{data}")
+    myquant_code = stockcode_to_myquant(security)
 
-    return data
-    """
+    # 市价成交暂定价格为0，根据实际客户端调整
+    price = 0
+    sid = csv_generate_order(
+        account_id, myquant_code, volume, OrderSide.SELL, BidType.MARKET, price
+    )
+    if sid is None:
+        return {
+            "status": 401,
+            "msg": "failed to append data to input file, check lock or file",
+        }
+
+    sleep(0.2)
+    rpt_file = get_gm_out_csv_execreport(account_id)
+    print(f"exec report file: {rpt_file}")
+    cid = csv_get_exec_report_data(rpt_file, sid)
+
+    return {"status": 200, "msg": "success", "data": {"cid": cid}}
 
 
 def wrapper_get_today_entrusts(account_id: str):
-    """
-    orders1 = get_orders(account=account_id)
-    print(f"get_orders:\n{orders1}")
+    rpt_file = get_gm_out_csv_execreport(account_id)
+    print(f"exec report file: {rpt_file}")
 
-    orders2 = get_unfinished_orders(account=account_id)
-    print(f"get_unfinished_orders:\n{orders2}")
-
-    return orders1 + orders2
-    """
+    entrusts = csv_get_exec_report_data2(rpt_file)
+    return {"status": 200, "msg": "success", "data": entrusts}
 
 
-def wrapper_cancel_enturst(account_id: str, security: str, order_id: str):
-    # example from official website, at least cl_ord_id must be provided
-    # order_1 = {'symbol': 'SHSE.600000', 'cl_ord_id': 'cl_ord_id_1', 'price': 11, 'side': 1, 'order_type':1 }
-    order1 = {
-        "account_id": account_id,
-        "symbol": stockcode_to_myquant(security),
-        "cl_ord_id": order_id,
-    }
-    orders = [order1]
-    #order_cancel(wait_cancel_orders=orders)
+def wrapper_cancel_enturst(account_id: str, security: str, sid: str):
+    myquant_code = stockcode_to_myquant(security)
+
+    sid = csv_generate_cancel_order(account_id, myquant_code, sid)
+    if sid is None:
+        return {
+            "status": 401,
+            "msg": "failed to append data to input file, check lock or file",
+        }
+
+    sleep(0.2)
+    status_file = get_gm_out_csv_order_status_change(account_id)
+    print(f"exec report file: {status_file}")
+    last_stataus = csv_get_order_status_change_data(status_file, sid)
+
+    return {"status": 200, "msg": "success", "data": {"status": last_stataus}}
 
 
 def wrapper_cancel_all_enturst(account_id: str):
-    #order_cancel_all(account=account_id)
+    # 行为待定，取消所有委托，如果是当天所有未完成的委托，则需要逐个查找order_status.csv里面，所有未完成的委托
+    # 找到所有的sid之后，再写入cancel_order.csv文件中
+    # 条件分别为：SID有效，时间在今天，委托未完成（不包括已成，已失败，无效等等）
     pass
 
 
 def wrapper_get_today_trades(account_id: str):
-    """
-    reports = get_execution_reports(account=account_id)
-    print(f"all reports:\n{reports}")
-    return reports
-    """
+    orders_file = get_gm_out_csv_orderstatus(account_id)
+    print(f"order status file: {orders_file}")
+
+    orders = csv_get_order_status(orders_file)
+    return {"status": 200, "msg": "success", "data": orders}

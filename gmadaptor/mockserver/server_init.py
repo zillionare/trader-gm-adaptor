@@ -6,10 +6,10 @@ import os
 import sys
 from os import path
 
-import cfg4py
-from cfg4py.config import Config
 from sanic import Sanic
 
+import cfg4py
+from cfg4py.config import Config
 from gmadaptor.mockserver.route_map import initialize_blueprint
 
 logger = logging.getLogger(__name__)
@@ -36,4 +36,4 @@ def server_start(port: int = 9000) -> int:
     """
     initialize_blueprint(app)
     print("server initialized")
-    app.run(host="0.0.0.0", port="9000")
+    app.run(host="0.0.0.0", port=port)

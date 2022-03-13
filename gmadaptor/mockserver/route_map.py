@@ -2,14 +2,16 @@
 import logging
 import os
 
-from sanic import Blueprint, Sanic, response, request
+from sanic import Blueprint, Sanic, request, response
 from sanic.exceptions import ServerError
 
-import gmtrader.gmclient_wrapper.handlers as handler
-from gmtrader.mockserver.helper import make_response, check_request_token, check_duplicated_request
-from gmtrader.gmclient.wrapper_init import check_gm_client_account
-
-
+import gmadaptor.gmclient.handlers as handler
+from gmadaptor.gmclient.wrapper import check_gm_account
+from gmadaptor.mockserver.helper import (
+    check_duplicated_request,
+    check_request_token,
+    make_response,
+)
 
 logger = logging.getLogger(__name__)
 bp_gm_adaptor = Blueprint("gmclient", url_prefix="/gmclient/v1", strict_slashes=False)
@@ -27,15 +29,15 @@ async def validate_request(request: request):
     if duplicated:
         return response.json(make_response(401, "duplicated request"), 401)
 
-    if request.method == 'POST':
-        account = request.json.get('account_id')
-        if (account is not None) and (not check_gmtrade_account(account)):
+    if request.method == "POST":
+        account = request.json.get("account_id")
+        if (account is not None) and (not check_gm_account(account)):
             return response.json(make_response(401, "invalid account id"), 401)
 
 
 @bp_gm_adaptor.route("/", methods=["GET"])
 async def bp_gm_adaptor_default_route(request):
-    return response.text("gm trader mock server")
+    return response.text("gm file order wrapper")
 
 
 @bp_gm_adaptor.route("/balance", methods=["POST"])
@@ -43,21 +45,22 @@ async def bp_mock_get_balance(request):
     account_id = request.json.get("account_id")
     print(f"balance: {account_id}")
 
-    cash = handler.wrapper_get_balance(account_id)
-    mycash = gmtrade_cash(cash)
-    return response.json(make_response(0, "OK", mycash.toDict()))
+    result = handler.wrapper_get_balance(account_id)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
+
+    return response.json(make_response(0, "OK", result["data"]))
 
 
 @bp_gm_adaptor.route("/positions", methods=["POST"])
 async def bp_mock_get_positions(request):
     account_id = request.json.get("account_id")
-    poses = handler.wrapper_get_positions(account_id)
 
-    pos_list = []
-    for pos in poses:
-        pos_list.append(gmtrade_position(pos).toDict())
+    result = handler.wrapper_get_positions(account_id)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
 
-    return response.json(make_response(0, "OK", pos_list))
+    return response.json(make_response(0, "OK", result["data"]))
 
 
 @bp_gm_adaptor.route("/buy", methods=["POST"])
@@ -66,19 +69,22 @@ async def bp_mock_buy(request):
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     price = request.json.get("price")
-    volume = request.json.get("vloume")
+    volume = request.json.get("volume")
 
-    result = handler.wrapper_buy(account_id, symbol, price, volume)[0]
+    result = handler.wrapper_buy(account_id, symbol, price, volume)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
+    order_id = result["data"]["cid"]
     return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": result.cl_ord_id})
+        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
 
 
 @bp_gm_adaptor.route("/market_buy", methods=["POST"])
 async def bp_mock_market_buy(request):
-    """掘金仿真交易API支持市价成交，因此无需指定限价
+    """掘金文件单支持多种市价成交方式
 
     Args:
         request (_type_): _description_
@@ -89,14 +95,17 @@ async def bp_mock_market_buy(request):
     account_id = request.json.get("account_id")
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
-    #price = request.json.get("price")
-    volume = request.json.get("vloume")
+    # price = request.json.get("price")
+    volume = request.json.get("volume")
 
-    result = handler.wrapper_market_buy(account_id, symbol, volume)[0]
+    result = handler.wrapper_market_buy(account_id, symbol, volume)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
+    order_id = result["data"]["cid"]
     return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": result.cl_ord_id})
+        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
 
 
@@ -106,13 +115,16 @@ async def bp_mock_sell(request):
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     price = request.json.get("price")
-    volume = request.json.get("vloume")
+    volume = request.json.get("volume")
 
-    result = handler.wrapper_sell(account_id, symbol, price, volume)[0]
+    result = handler.wrapper_sell(account_id, symbol, price, volume)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
+    order_id = result["data"]["cid"]
     return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": result.cl_ord_id})
+        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
 
 
@@ -121,53 +133,61 @@ async def bp_mock_market_sell(request):
     account_id = request.json.get("account_id")
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
-    #price = request.json.get("price")
-    volume = request.json.get("vloume")
+    # price = request.json.get("price")
+    volume = request.json.get("volume")
 
-    result = handler.wrapper_market_sell(account_id, symbol, volume)[0]
+    result = handler.wrapper_market_sell(account_id, symbol, volume)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
+    order_id = result["data"]["cid"]
     return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": result.cl_ord_id})
+        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
 
 
 @bp_gm_adaptor.route("/today_entrusts", methods=["POST"])
 async def bp_mock_get_today_entrusts(request):
     account_id = request.json.get("account_id")
-    request_id = request.headers.get("Request-ID")
+    # request_id = request.headers.get("Request-ID")
 
-    orders = handler.wrapper_get_today_entrusts(account_id)
+    result = handler.wrapper_get_today_entrusts(account_id)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
 
-    rpt_list = []
-    for order in orders:
-        rpt_list.append(gmtrade_order(order, request_id).toDict())
-
-    return response.json(make_response(0, "OK", rpt_list))
+    order_list = result["data"]
+    return response.json(make_response(0, "OK", order_list))
 
 
 @bp_gm_adaptor.route("/today_trades", methods=["POST"])
 async def bp_mock_get_today_trades(request):
     account_id = request.json.get("account_id")
-    request_id = request.headers.get("Request-ID")
+    # request_id = request.headers.get("Request-ID")
 
-    reports = handler.wrapper_get_today_trades(account_id)
+    result = handler.wrapper_get_today_trades(account_id)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
 
-    rpt_list = []
-    for report in reports:
-        rpt_list.append(gmtrade_exec_report(report, request_id).toDict())
-
-    return response.json(make_response(0, "OK", rpt_list))
+    order_list = result["data"]
+    return response.json(make_response(0, "OK", order_list))
 
 
 @bp_gm_adaptor.route("/cancel_entrust", methods=["POST"])
 async def bp_mock_cancel_entrust(request):
     account_id = request.json.get("account_id")
-    symbol = request.json.get("security")
-    order_id = request.json.get("order_id")
+    request_id = request.headers.get("Request-ID")
 
-    handler.wrapper_cancel_enturst(account_id, symbol, order_id)
-    return response.json(make_response(0, "OK"))
+    # 股票代码只作为参考用，不参与委托撤销
+    symbol = request.json.get("security")
+    # 掘金文件单只支持SID关联委托，其他order id不可用
+    sid = request.json.get("cid")
+
+    result = handler.wrapper_cancel_enturst(account_id, symbol, sid)
+    last_status = result["data"]["status"]
+    return response.json(
+        make_response(0, "OK", {"request_id": request_id, "status": last_status})
+    )
 
 
 @bp_gm_adaptor.route("/cancel_all_entrusts", methods=["POST"])
@@ -184,7 +204,6 @@ def initialize_blueprint(app: Sanic):
     Args:
         app (Sanic): instance of this sanic server
     """
-    
-    app.blueprint(bp_gm_adaptor)
 
+    app.blueprint(bp_gm_adaptor)
     print("blueprint v1 added")

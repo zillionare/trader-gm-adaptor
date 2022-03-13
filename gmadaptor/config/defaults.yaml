@@ -7,12 +7,13 @@ server_info:
     access_token : "ec31c154fc0cbf4ba39eb48689ebcbfaacf8067f"
 
 gm_info:
-    gm_output: "C:\\Projects\\gm-client-workspace\\account_out"
-    - user : jack
-        user_id: 6a89549c-a1df-11ec-aaef-00163e0a4100
-        user_input: "C:\\Projects\\gm-client-workspace\\jack_input1"
-    
-    - user : henry
-        user_id: 1751ebfe-9ec1-11ec-ba58-00163e0a4100
-        henry_input: "C:\\Projects\\gm-client-workspace\\henry_input1"
-    
+    gm_output: "/home/henry/share/account_out"
+    account1:
+        acct_name: jack
+        acct_id: 6a89549c-a1df-11ec-aaef-00163e0a4100
+        acct_input: "/home/henry/share/jack_input1"
+
+    account2:
+        acct_name: henry
+        acct_id: 1751ebfe-9ec1-11ec-ba58-00163e0a4100
+        acct_input: "/home/henry/share/henry_input1"
