@@ -10,7 +10,7 @@ from sanic import Sanic
 
 import cfg4py
 from cfg4py.config import Config
-from gmadaptor.mockserver.route_map import initialize_blueprint
+from gmadaptor.httpserver.route_map import initialize_blueprint
 
 logger = logging.getLogger(__name__)
 

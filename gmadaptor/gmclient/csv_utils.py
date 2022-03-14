@@ -9,13 +9,13 @@ import uuid
 from os import path
 from threading import Lock
 
-from gmadaptor.common.gm_types import OrderBiz, OrderType
 from gmadaptor.common.types import BidType, OrderSide
 from gmadaptor.gmclient.data_conversion import (
     gm_exec_report,
     gm_order_status,
     gm_order_status_change,
 )
+from gmadaptor.gmclient.types import OrderBiz, OrderType
 from gmadaptor.gmclient.wrapper import (
     get_gm_account_info,
     get_gm_in_csv_cancelorder,

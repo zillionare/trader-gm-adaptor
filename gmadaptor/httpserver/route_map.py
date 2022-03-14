@@ -7,7 +7,7 @@ from sanic.exceptions import ServerError
 
 import gmadaptor.gmclient.handlers as handler
 from gmadaptor.gmclient.wrapper import check_gm_account
-from gmadaptor.mockserver.helper import (
+from gmadaptor.httpserver.helper import (
     check_duplicated_request,
     check_request_token,
     make_response,
