@@ -49,3 +49,10 @@ class Config(object):
             acct_id: Optional[str] = None
 
             acct_input: Optional[str] = None
+
+        class account3:
+            acct_name: Optional[str] = None
+
+            acct_id: Optional[str] = None
+
+            acct_input: Optional[str] = None

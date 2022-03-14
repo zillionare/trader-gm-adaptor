@@ -8,7 +8,7 @@ from time import sleep
 
 import cfg4py
 from cfg4py.config import Config
-from gmadaptor.common.stock_name_conversion import (
+from gmadaptor.common.name_conversion import (
     stockcode_to_joinquant,
     stockcode_to_myquant,
 )
@@ -17,11 +17,11 @@ from gmadaptor.gmclient.csv_utils import (
     csv_generate_cancel_order,
     csv_generate_order,
     csv_get_exec_report_data,
-    csv_get_exec_report_data2,
     csv_get_order_status,
     csv_get_order_status_change_data,
+    csv_get_unfinished_entrusts_from_order_status,
 )
-from gmadaptor.gmclient.data_conversion import gm_cash, gm_position
+from gmadaptor.gmclient.csvdata import gm_cash, gm_position
 from gmadaptor.gmclient.wrapper import (
     get_gm_account_info,
     get_gm_in_csv_cancelorder,
@@ -87,11 +87,13 @@ def wrapper_buy(account_id: str, security: str, price: float, volume: int):
         return {"status": 401, "msg": "failed to append data to input file"}
 
     sleep(0.2)
-    rpt_file = get_gm_out_csv_execreport(account_id)
-    print(f"exec report file: {rpt_file}")
-    cid = csv_get_exec_report_data(rpt_file, sid)
+    status_file = get_gm_out_csv_order_status_change(account_id)
+    print(f"exec report file: {status_file}")
+    result = csv_get_order_status_change_data(status_file, sid)
+    if result is None:
+        return {"status": 500, "msg": "failed to open report file"}
 
-    return {"status": 200, "msg": "success", "data": {"cid": cid}}
+    return {"status": 200, "msg": "success", "data": result}
 
 
 def wrapper_market_buy(
@@ -111,11 +113,13 @@ def wrapper_market_buy(
         }
 
     sleep(0.2)
-    rpt_file = get_gm_out_csv_execreport(account_id)
-    print(f"exec report file: {rpt_file}")
-    cid = csv_get_exec_report_data(rpt_file, sid)
+    status_file = get_gm_out_csv_order_status_change(account_id)
+    print(f"exec report file: {status_file}")
+    result = csv_get_order_status_change_data(status_file, sid)
+    if result is None:
+        return {"status": 500, "msg": "failed to open report file"}
 
-    return {"status": 200, "msg": "success", "data": {"cid": cid}}
+    return {"status": 200, "msg": "success", "data": result}
 
 
 def wrapper_sell(account_id: str, security: str, price: float, volume: int):
@@ -134,11 +138,13 @@ def wrapper_sell(account_id: str, security: str, price: float, volume: int):
         }
 
     sleep(0.2)
-    rpt_file = get_gm_out_csv_execreport(account_id)
-    print(f"exec report file: {rpt_file}")
-    cid = csv_get_exec_report_data(rpt_file, sid)
+    status_file = get_gm_out_csv_order_status_change(account_id)
+    print(f"exec report file: {status_file}")
+    result = csv_get_order_status_change_data(status_file, sid)
+    if result is None:
+        return {"status": 500, "msg": "failed to open report file"}
 
-    return {"status": 200, "msg": "success", "data": {"cid": cid}}
+    return {"status": 200, "msg": "success", "data": result}
 
 
 def wrapper_market_sell(
@@ -158,25 +164,20 @@ def wrapper_market_sell(
         }
 
     sleep(0.2)
-    rpt_file = get_gm_out_csv_execreport(account_id)
-    print(f"exec report file: {rpt_file}")
-    cid = csv_get_exec_report_data(rpt_file, sid)
+    status_file = get_gm_out_csv_order_status_change(account_id)
+    print(f"exec report file: {status_file}")
+    result = csv_get_order_status_change_data(status_file, sid)
+    if result is None:
+        return {"status": 500, "msg": "failed to open report file"}
 
-    return {"status": 200, "msg": "success", "data": {"cid": cid}}
-
-
-def wrapper_get_today_entrusts(account_id: str):
-    rpt_file = get_gm_out_csv_execreport(account_id)
-    print(f"exec report file: {rpt_file}")
-
-    entrusts = csv_get_exec_report_data2(rpt_file)
-    return {"status": 200, "msg": "success", "data": entrusts}
+    return {"status": 200, "msg": "success", "data": result}
 
 
 def wrapper_cancel_enturst(account_id: str, security: str, sid: str):
     myquant_code = stockcode_to_myquant(security)
 
-    sid = csv_generate_cancel_order(account_id, myquant_code, sid)
+    sid_list = [sid]
+    sid = csv_generate_cancel_order(account_id, myquant_code, sid_list)
     if sid is None:
         return {
             "status": 401,
@@ -194,13 +195,33 @@ def wrapper_cancel_enturst(account_id: str, security: str, sid: str):
 def wrapper_cancel_all_enturst(account_id: str):
     # 行为待定，取消所有委托，如果是当天所有未完成的委托，则需要逐个查找order_status.csv里面，所有未完成的委托
     # 找到所有的sid之后，再写入cancel_order.csv文件中
-    # 条件分别为：SID有效，时间在今天，委托未完成（不包括已成，已失败，无效等等）
-    pass
+    # 条件分别为：SID有效，时间在今天，委托未完成（不包括已成，已撤，已过期）
+    order_status_file = get_gm_out_csv_orderstatus(account_id)
+    print(f"order status file: {order_status_file}")
+
+    entrusts = csv_get_unfinished_entrusts_from_order_status(order_status_file)
+    if entrusts is not None and len(entrusts) > 0:
+        result = csv_generate_cancel_order(account_id, "", entrusts)
+        if result is None:
+            return {
+                "status": 401,
+                "msg": "failed to append data to input file, check lock or file",
+            }
+
+    return {"status": 200, "msg": "success"}
+
+
+def wrapper_get_today_entrusts(account_id: str):
+    order_status_file = get_gm_out_csv_orderstatus(account_id)
+    print(f"order status file: {order_status_file}")
+
+    entrusts = csv_get_order_status(order_status_file)
+    return {"status": 200, "msg": "success", "data": entrusts}
 
 
 def wrapper_get_today_trades(account_id: str):
-    orders_file = get_gm_out_csv_orderstatus(account_id)
-    print(f"order status file: {orders_file}")
+    orders_file = get_gm_out_csv_execreport(account_id)
+    print(f"execution report file: {orders_file}")
 
-    orders = csv_get_order_status(orders_file)
+    orders = csv_get_exec_report_data(orders_file)
     return {"status": 200, "msg": "success", "data": orders}

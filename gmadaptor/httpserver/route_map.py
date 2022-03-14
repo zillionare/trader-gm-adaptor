@@ -192,7 +192,7 @@ async def bp_mock_cancel_entrust(request):
 
 @bp_gm_adaptor.route("/cancel_all_entrusts", methods=["POST"])
 async def bp_mock_cancel_all_entrusts(request):
-    account_id = "145be423-a021-11ec-8e33-00163e0a4100"
+    account_id = request.json.get("account_id")
 
     handler.wrapper_cancel_all_enturst(account_id)
     return response.json(make_response(0, "OK"))

@@ -10,7 +10,7 @@ from os import path
 from threading import Lock
 
 from gmadaptor.common.types import BidType, OrderSide
-from gmadaptor.gmclient.data_conversion import (
+from gmadaptor.gmclient.csvdata import (
     gm_exec_report,
     gm_order_status,
     gm_order_status_change,
@@ -129,7 +129,7 @@ def csv_generate_order(
         lock.release()
 
 
-def csv_generate_cancel_order(account_id: str, symbol: str, sid: str):
+def csv_generate_cancel_order(account_id: str, symbol: str, sid_list: list):
     # get account information
     acct_info = get_gm_account_info(account_id)
     if acct_info is None:
@@ -156,33 +156,19 @@ def csv_generate_cancel_order(account_id: str, symbol: str, sid: str):
             if add_head:
                 csvfile.write("sid,comment\n")
 
-            csvfile.write(f"{sid},comments,\n")
+            for sid in sid_list:
+                csvfile.write(f"{sid},comments,\n")
 
             # save to disk immediately
             csvfile.flush()
 
-        return sid
+        return 0
 
     finally:
         lock.release()
 
 
-def csv_get_exec_report_data(rpt_file: str, sid: str):
-    if not path.exists(rpt_file):
-        logger.error("execution report file not found: %s", rpt_file)
-        return None
-
-    with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
-        for row in csv.DictReader(csvfile):
-            report = gm_exec_report(row)
-            if report.sid == sid:
-                return report.cl_ord_id
-
-    logger.info("sid not found in exec report file: %s", sid)
-    return None
-
-
-def csv_get_exec_report_data2(rpt_file: str):
+def csv_get_exec_report_data(rpt_file: str):
     if not path.exists(rpt_file):
         logger.error("execution report file not found: %s", rpt_file)
         return None
@@ -203,18 +189,20 @@ def csv_get_order_status_change_data(status_file: str, sid: str):
         logger.error("execution report file not found: %s", status_file)
         return None
 
+    # 10待报，1已报，3已成，8已拒，9挂起，12已过期
     order_status = 0
+    cl_ord_id = None
+
     with open(status_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = gm_order_status_change(row)
             print(f"read order status change dataline: {report.sid}")
             # 应该获取时间最新的数据，返回给用户，暂时简化处理
             if sid == report.sid:
-                if order_status == 0 or order_status == 1:
-                    print(f"order status read: {sid} -> {report.status}")
-                    order_status = report.status
+                cl_ord_id = report.cl_ord_id
+                order_status = report.status
 
-    return order_status
+    return {"order_status": order_status, "cid": cl_ord_id}
 
 
 # order_status.csv
@@ -239,4 +227,41 @@ def csv_get_order_status(orders_file: str):
                 orders.append(order.toDict())
 
     print("order cound: ", len(orders))
+    return orders
+
+
+def csv_get_unfinished_entrusts_from_order_status(orders_file: str):
+    """
+    OrderStatus_Filled = 3                # 已成
+    OrderStatus_Canceled = 5              # 已撤
+    OrderStatus_Rejected = 8              # 已拒绝
+    OrderStatus_Expired = 12              # 已过期
+
+    """
+    if not path.exists(orders_file):
+        logger.error("execution report file not found: %s", orders_file)
+        return None
+
+    today = datetime.datetime.now()
+
+    orders = []
+    with open(orders_file, "r", encoding="utf-8-sig") as csvfile:
+        for row in csv.DictReader(csvfile):
+            order = gm_order_status(row)
+            ot = order.created_at
+            if (
+                ot.year == today.year
+                and ot.month == today.month
+                and ot.day == today.day
+            ):
+                if (
+                    order.status != 3
+                    and order.status != 5
+                    and order.status != 8
+                    and order.status != 12
+                ):
+                    print("entrust to be canceled: %s  -> %d", order.sid, order.status)
+                    orders.append(order.sid)
+
+    print("entrust to be canceled: ", len(orders))
     return orders

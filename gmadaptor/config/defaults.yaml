@@ -17,3 +17,8 @@ gm_info:
         acct_name: henry
         acct_id: 1751ebfe-9ec1-11ec-ba58-00163e0a4100
         acct_input: "/home/henry/share/henry_input1"
+
+    account3:
+        acct_name: tom
+        acct_id: dfa5fc0a-a338-11ec-9232-00163e0a4100
+        acct_input: "/home/henry/share/tom_input1"

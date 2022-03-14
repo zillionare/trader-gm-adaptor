@@ -105,7 +105,7 @@ def check_gm_account(account_id: str):
     if account_id in account_list.keys():
         return True
     else:
-        logger.warn("account id not found in account list: %s", account_id)
+        logger.warning("account id not found in account list: %s", account_id)
         return False
 
 
