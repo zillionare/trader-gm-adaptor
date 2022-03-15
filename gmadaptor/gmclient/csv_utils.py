@@ -184,25 +184,67 @@ def csv_get_exec_report_data(rpt_file: str):
     return reports
 
 
+def csv_get_exec_report_data_by_sid(rpt_file: str, sid: str):
+    if not path.exists(rpt_file):
+        logger.error("execution report file not found: %s", rpt_file)
+        return None
+
+    # ExecType_Trade = 15 # 成交(有效)
+    target_report = None
+    with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
+        for row in csv.DictReader(csvfile):
+            report = gm_exec_report(row)
+            logger.debug(f"read exec report line: {report.sid}")
+            if sid == report.sid:
+                target_report = report
+
+    # retry next time until timeout
+    if target_report is None:
+        return {"result": 0}
+
+    exec_type = report.exec_type
+    if exec_type == 15:
+        return {"result": 2, "report": target_report}
+    else:
+        # need retry
+        return {"result": 1, "report": target_report}
+
+
 def csv_get_order_status_change_data(status_file: str, sid: str):
     if not path.exists(status_file):
         logger.error("execution report file not found: %s", status_file)
         return None
 
-    # 10待报，1已报，3已成，8已拒，9挂起，12已过期
-    order_status = 0
-    cl_ord_id = None
+    result_report = None
 
+    # 10待报, 1已报，6待撤
+    # 2部成, 3已成, 5, 已撤, 8已拒, 9挂起, 12已过期
     with open(status_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = gm_order_status_change(row)
             # print(f"read order status change dataline: {report.sid}")
             # 应该获取时间最新的数据，返回给用户，暂时简化处理
             if sid == report.sid:
-                cl_ord_id = report.cl_ord_id
-                order_status = report.status
+                result_report = report
 
-    return {"order_status": order_status, "cid": cl_ord_id}
+    # retry next time until timeout
+    if result_report is None:
+        return {"result": 0}
+
+    status = report.status
+    # 执行完毕状态
+    if (
+        status == 2
+        or status == 3
+        or status == 5
+        or status == 8
+        or status == 9
+        or status == 12
+    ):
+        return {"result": 2, "report": result_report}
+    else:
+        # need retry
+        return {"result": 1, "report": result_report}
 
 
 # order_status.csv

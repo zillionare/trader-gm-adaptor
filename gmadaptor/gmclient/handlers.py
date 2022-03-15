@@ -4,6 +4,7 @@
 import asyncio
 import csv
 import logging
+from ast import While
 from time import sleep
 
 import cfg4py
@@ -12,11 +13,12 @@ from gmadaptor.common.name_conversion import (
     stockcode_to_joinquant,
     stockcode_to_myquant,
 )
-from gmadaptor.common.types import BidType, OrderSide
+from gmadaptor.common.types import BidType, OrderSide, TradeEvent, TradeOrder
 from gmadaptor.gmclient.csv_utils import (
     csv_generate_cancel_order,
     csv_generate_order,
     csv_get_exec_report_data,
+    csv_get_exec_report_data_by_sid,
     csv_get_order_status,
     csv_get_order_status_change_data,
     csv_get_unfinished_entrusts_from_order_status,
@@ -73,104 +75,130 @@ def wrapper_get_positions(account_id: str):
     return {"status": 200, "msg": "success", "data": poses}
 
 
-def wrapper_buy(account_id: str, security: str, price: float, volume: int):
+def wrapper_normal_trade_op(
+    account_id: str, security: str, price: float, volume: int, order_side: OrderSide
+):
     myquant_code = stockcode_to_myquant(security)
 
-    if price is None:
-        logger.info("price not provided in order entrust: %s, %s", account_id, security)
-        return {"status": 401, "msg": "price cannot be None"}
-
     sid = csv_generate_order(
-        account_id, myquant_code, volume, OrderSide.BUY, BidType.LIMIT, price
+        account_id, myquant_code, volume, order_side, BidType.LIMIT, price
     )
     if sid is None:
         return {"status": 401, "msg": "failed to append data to input file"}
 
-    sleep(0.2)
+    report = None
+
+    # get output file first
     status_file = get_gm_out_csv_order_status_change(account_id)
     # print(f"exec report file: {status_file}")
-    result = csv_get_order_status_change_data(status_file, sid)
-    if result is None:
-        return {"status": 500, "msg": "failed to open report file"}
 
-    return {"status": 200, "msg": "success", "data": result}
+    timeout = 2000  # 默认2000毫秒
+    while timeout > 0:
+        result = csv_get_order_status_change_data(status_file, sid)
+        status = result["result"]
+        if status != 0:
+            report = result["report"]
+        if status == 2:
+            break
+
+        sleep(100 / 1000)
+        timeout -= 100
+
+    if report is None:
+        return {"status": 500, "msg": "failed to get result of this entrust"}
+
+    order = TradeOrder(report.order_id, report.price, report.filled_vol, report.recv_at)
+    event = TradeEvent(
+        report.symbol,
+        BidType.LIMIT,
+        report.sid,
+        report.price,
+        order_side,
+        report.price,
+        report.status,
+        report.recv_at,
+        report.volume,
+        [order],
+    )
+    return {"status": 200, "msg": "success", "data": event.toDict()}
 
 
-def wrapper_market_buy(
-    account_id: str, security: str, volume: int, limit_price: float = None
+# 市价买入或者卖出
+def wrapper_market_trade_op(
+    account_id: str,
+    security: str,
+    volume: int,
+    order_side: OrderSide,
+    limit_price: float = None,
 ):
     myquant_code = stockcode_to_myquant(security)
 
     # 市价成交暂定价格为0，根据实际客户端调整
     price = 0
-    sid = csv_generate_order(
-        account_id, myquant_code, volume, OrderSide.BUY, BidType.MARKET, price
-    )
-    if sid is None:
-        return {
-            "status": 401,
-            "msg": "failed to append data to input file, check lock or file",
-        }
-
-    sleep(0.2)
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    # print(f"exec report file: {status_file}")
-    result = csv_get_order_status_change_data(status_file, sid)
-    if result is None:
-        return {"status": 500, "msg": "failed to open report file"}
-
-    return {"status": 200, "msg": "success", "data": result}
-
-
-def wrapper_sell(account_id: str, security: str, price: float, volume: int):
-    myquant_code = stockcode_to_myquant(security)
-
-    if price is None:
-        return {"status": 401, "msg": "price cannot be None [sell]"}
 
     sid = csv_generate_order(
-        account_id, myquant_code, volume, OrderSide.SELL, BidType.LIMIT, price
+        account_id, myquant_code, volume, order_side, BidType.MARKET, price
     )
     if sid is None:
-        return {
-            "status": 401,
-            "msg": "failed to append data to input file, check lock or file",
-        }
+        return {"status": 401, "msg": "failed to append data to input file"}
 
-    sleep(0.2)
+    report = None
+
+    # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
     status_file = get_gm_out_csv_order_status_change(account_id)
+    # print(f"exec report change file: {status_file}")
+
+    timeout = 2000  # 默认2000毫秒
+    while timeout > 0:
+        result = csv_get_order_status_change_data(status_file, sid)
+        status = result["result"]
+        if status != 0:
+            report = result["report"]
+        if status == 2:
+            break
+
+        sleep(100 / 1000)
+        timeout -= 100
+
+    if report is None:
+        return {"status": 500, "msg": "failed to get result of this entrust"}
+
+    # 状态成功之后，再读取具体的成交记录，特指已成，部成等情况
+    exec_report = None
+    status_file = get_gm_out_csv_execreport(account_id)
     # print(f"exec report file: {status_file}")
-    result = csv_get_order_status_change_data(status_file, sid)
-    if result is None:
-        return {"status": 500, "msg": "failed to open report file"}
 
-    return {"status": 200, "msg": "success", "data": result}
+    timeout = 2000  # 默认2000毫秒
+    while timeout > 0:
+        result = csv_get_exec_report_data_by_sid(status_file, sid)
+        status = result["result"]
+        if status != 0:
+            exec_report = result["report"]
+        if status == 2:
+            break
 
+        sleep(100 / 1000)
+        timeout -= 100
 
-def wrapper_market_sell(
-    account_id: str, security: str, volume: int, limit_price: float = None
-):
-    myquant_code = stockcode_to_myquant(security)
+    if exec_report is None:
+        return {"status": 500, "msg": "failed to get result of this entrust"}
 
-    # 市价成交暂定价格为0，根据实际客户端调整
-    price = 0
-    sid = csv_generate_order(
-        account_id, myquant_code, volume, OrderSide.SELL, BidType.MARKET, price
+    order = TradeOrder(
+        exec_report.order_id, exec_report.price, exec_report.volume, exec_report.recv_at
     )
-    if sid is None:
-        return {
-            "status": 401,
-            "msg": "failed to append data to input file, check lock or file",
-        }
-
-    sleep(0.2)
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    # print(f"exec report file: {status_file}")
-    result = csv_get_order_status_change_data(status_file, sid)
-    if result is None:
-        return {"status": 500, "msg": "failed to open report file"}
-
-    return {"status": 200, "msg": "success", "data": result}
+    event = TradeEvent(
+        report.symbol,
+        BidType.MARKET,
+        report.sid,
+        report.price,
+        order_side,
+        report.price,
+        report.status,
+        report.recv_at,
+        report.volume,
+        [order],
+    )
+    return {"status": 200, "msg": "success", "data": event.toDict()}
 
 
 def wrapper_cancel_enturst(account_id: str, security: str, sid: str):
@@ -209,6 +237,9 @@ def wrapper_cancel_all_enturst(account_id: str):
             }
 
     return {"status": 200, "msg": "success"}
+
+
+# 以下3个接口暂为自用目的，Z trader server不对接
 
 
 def wrapper_get_today_all_entrusts(account_id: str):

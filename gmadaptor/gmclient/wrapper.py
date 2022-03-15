@@ -16,6 +16,14 @@ gm_out_dir = ""
 account_list = {}
 
 
+def check_gm_account(account_id: str):
+    if account_id in account_list.keys():
+        return True
+    else:
+        logger.warning("account id not found in account list: %s", account_id)
+        return False
+
+
 def get_gm_out_csv_cash(account_id: str):
     if account_id in account_list.keys():
         return path.normpath(path.join(gm_out_dir, account_id, "cash.csv"))
@@ -101,14 +109,6 @@ def get_gm_account_info(account_id: str):
     return account_list[account_id]
 
 
-def check_gm_account(account_id: str):
-    if account_id in account_list.keys():
-        return True
-    else:
-        logger.warning("account id not found in account list: %s", account_id)
-        return False
-
-
 def gm_client_wrapper_start() -> int:
     server_config = cfg4py.get_instance()
     gm_info = server_config.gm_info
@@ -119,29 +119,27 @@ def gm_client_wrapper_start() -> int:
         logger.error("output folder of this gm client not found: %s", gm_out_dir)
         return -1
 
-    for name in dir(server_config.gm_info):
-        if name.startswith("account"):
-            acct_info = eval(f"gm_info.{name}")
-
-            in_dir = acct_info.acct_input
-            if not path.exists(gm_out_dir):
-                logger.fatal(
-                    "input folder of account %s not found: %s",
-                    acct_info.acct_id,
-                    in_dir,
-                )
-                return -1
-
-            # each account has only 1 input folder, so we need a lock
-            lock = Lock()
-            account_list[acct_info.acct_id] = [
-                acct_info.acct_name,
-                acct_info.acct_input,
-                lock,
-            ]
-            logger.info(
-                f"account added: {acct_info.acct_id}, {acct_info.acct_name}, {acct_info.acct_input}"
+    accounts = server_config.gm_info.accounts
+    for account in accounts:
+        acct_name = account["name"]
+        acct_id = account["acct_id"]
+        acct_input = account["acct_input"]
+        if not path.exists(acct_input):
+            logger.fatal(
+                "input folder of account %s not found: %s",
+                acct_id,
+                acct_input,
             )
+            return -1
+
+        # each account has only 1 input folder, so we need a lock
+        lock = Lock()
+        account_list[acct_id] = [
+            acct_name,
+            acct_input,
+            lock,
+        ]
+        logger.info(f"account added: {acct_id}, {acct_name}, {acct_input}")
 
     # begin processing file orders
     return 0

@@ -6,12 +6,9 @@ from sanic import Blueprint, Sanic, request, response
 from sanic.exceptions import ServerError
 
 import gmadaptor.gmclient.handlers as handler
+from gmadaptor.common.types import OrderSide
 from gmadaptor.gmclient.wrapper import check_gm_account
-from gmadaptor.httpserver.helper import (
-    check_duplicated_request,
-    check_request_token,
-    make_response,
-)
+from gmadaptor.httpserver.helper import check_request_token, make_response
 
 logger = logging.getLogger(__name__)
 bp_gm_adaptor = Blueprint("gmclient", url_prefix="/gmclient/v1", strict_slashes=False)
@@ -19,20 +16,16 @@ bp_gm_adaptor = Blueprint("gmclient", url_prefix="/gmclient/v1", strict_slashes=
 
 @bp_gm_adaptor.middleware("request")
 async def validate_request(request: request):
-    """check token and duplicated request"""
-
-    is_authenticated = check_request_token(request)
+    # check access_token first
+    token = request.headers.get("Authorization")
+    is_authenticated = check_request_token(token)
     if not is_authenticated:
         return response.json(make_response(401, "invalid access token"), 401)
 
-    duplicated = check_duplicated_request(request)
-    if duplicated:
-        return response.json(make_response(401, "duplicated request"), 401)
-
     if request.method == "POST":
-        account = request.json.get("account_id")
-        if (account is not None) and (not check_gm_account(account)):
-            return response.json(make_response(401, "invalid account id"), 401)
+        account = request.headers.get("Account-ID")
+        if account is None or not check_gm_account(account):
+            return response.json(make_response(401, "invalid Account-ID"), 401)
 
 
 @bp_gm_adaptor.route("/", methods=["GET"])
@@ -42,7 +35,7 @@ async def bp_gm_adaptor_default_route(request):
 
 @bp_gm_adaptor.route("/balance", methods=["POST"])
 async def bp_mock_get_balance(request):
-    account_id = request.json.get("account_id")
+    account_id = request.headers.get("Account-ID")
     print(f"balance: {account_id}")
 
     result = handler.wrapper_get_balance(account_id)
@@ -54,7 +47,7 @@ async def bp_mock_get_balance(request):
 
 @bp_gm_adaptor.route("/positions", methods=["POST"])
 async def bp_mock_get_positions(request):
-    account_id = request.json.get("account_id")
+    account_id = request.headers.get("Account-ID")
 
     result = handler.wrapper_get_positions(account_id)
     if result["status"] != 200:
@@ -65,24 +58,25 @@ async def bp_mock_get_positions(request):
 
 @bp_gm_adaptor.route("/buy", methods=["POST"])
 async def bp_mock_buy(request):
-    account_id = request.json.get("account_id")
-    request_id = request.headers.get("Request-ID")
+    account_id = request.headers.get("Account-ID")
+
     symbol = request.json.get("security")
     price = request.json.get("price")
     volume = request.json.get("volume")
-
     logger.info(f"buy, stock:{symbol}, vol:{volume}, price:{price}")
 
-    result = handler.wrapper_buy(account_id, symbol, price, volume)
+    if symbol is None or price is None or volume is None:
+        logger.info("parameter is empty: %s", account_id)
+        return response.json(make_response(-1, "parameter cannot be empty"))
+
+    result = handler.wrapper_normal_trade_op(
+        account_id, symbol, price, volume, OrderSide.BUY
+    )
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
-    order_id = result["data"]["cid"]
-    logger.info(f"buy, success, order id:{order_id}")
-    return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
-    )
+    return response.json(make_response(0, "OK", result["data"]))
 
 
 @bp_gm_adaptor.route("/market_buy", methods=["POST"])
@@ -95,8 +89,7 @@ async def bp_mock_market_buy(request):
     Returns:
         _type_: _description_
     """
-    account_id = request.json.get("account_id")
-    request_id = request.headers.get("Request-ID")
+    account_id = request.headers.get("Account-ID")
     symbol = request.json.get("security")
     # price = request.json.get("price")
     limit_price = request.json.get("limit_price")
@@ -104,44 +97,37 @@ async def bp_mock_market_buy(request):
 
     logger.info(f"market_buy, stock:{symbol}, vol:{volume}, limit_price:{limit_price}")
 
-    result = handler.wrapper_market_buy(account_id, symbol, volume)
+    result = handler.wrapper_market_trade_op(account_id, symbol, volume, OrderSide.BUY)
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
-    order_id = result["data"]["cid"]
-    logger.info(f"market_buy, success, order id:{order_id}")
-    return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
-    )
+    return response.json(make_response(0, "OK", result["data"]))
 
 
 @bp_gm_adaptor.route("/sell", methods=["POST"])
 async def bp_mock_sell(request):
-    account_id = request.json.get("account_id")
-    request_id = request.headers.get("Request-ID")
+    account_id = request.headers.get("Account-ID")
     symbol = request.json.get("security")
     price = request.json.get("price")
     volume = request.json.get("volume")
 
     logger.info(f"sell, stock:{symbol}, vol:{volume}, price:{price}")
 
-    result = handler.wrapper_sell(account_id, symbol, price, volume)
+    result = handler.wrapper_normal_trade_op(
+        account_id, symbol, price, volume, OrderSide.SELL
+    )
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
-    order_id = result["data"]["cid"]
-    logger.info(f"sell, success, order id:{order_id}")
-    return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
-    )
+    return response.json(make_response(0, "OK", result["data"]))
 
 
 @bp_gm_adaptor.route("/market_sell", methods=["POST"])
 async def bp_mock_market_sell(request):
-    account_id = request.json.get("account_id")
-    request_id = request.headers.get("Request-ID")
+    account_id = request.headers.get("Account-ID")
+
     symbol = request.json.get("security")
     # price = request.json.get("price")
     limit_price = request.json.get("limit_price")
@@ -149,16 +135,12 @@ async def bp_mock_market_sell(request):
 
     logger.info(f"market_sell, stock:{symbol}, vol:{volume}, limit_price:{limit_price}")
 
-    result = handler.wrapper_market_sell(account_id, symbol, volume)
+    result = handler.wrapper_market_trade_op(account_id, symbol, volume, OrderSide.SELL)
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
-    order_id = result["data"]["cid"]
-    logger.info(f"market_sell, success, order id:{order_id}")
-    return response.json(
-        make_response(0, "OK", {"request_id": request_id, "cid": order_id})
-    )
+    return response.json(make_response(0, "OK", result["data"]))
 
 
 @bp_gm_adaptor.route("/cancel_entrust", methods=["POST"])

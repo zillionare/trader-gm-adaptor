@@ -2,27 +2,56 @@
 # @Author   : henry
 # @Time     : 2022-03-09 15:08
 
+import datetime
 import uuid
 from enum import IntEnum
 
 
 class OrderSide(IntEnum):
-    BUY = 1
-    SELL = -1
-
-    def __str__(self):
-        return {OrderSide.BUY: "买入", OrderSide.SELL: "卖出"}[self]
+    BUY = 1  # 股票买入
+    SELL = -1  # 股票卖出
 
 
 class BidType(IntEnum):
-    LIMIT = 1
-    MARKET = 2
+    LIMIT = 1  # 限价委托
+    MARKET = 2  # 市价委托
 
-    def __str__(self):
-        return {
-            BidType.LIMIT: "限价委托",
-            BidType.MARKET: "市价委托",
+
+class OrderStatus(IntEnum):
+    ERROR = -1  # 异常
+    NO_DEAL = 1  # 未成交
+    PARTIAL_TRANSACTION = 2  # #部分成交
+    ALL_TRANSACTIONS = 3  # 全部成交
+    CANCEL_ALL_ORDERS = 4  # 全部撤单
+    REJECTED = 5  # 已拒绝
+
+    @classmethod
+    def get_status(cls, status_cn):
+        status_map = {
+            "未成交": cls.NO_DEAL.value,
+            "部分成交": cls.PARTIAL_TRANSACTION.value,
+            "全部成交": cls.ALL_TRANSACTIONS.value,
+            "全部撤单": cls.CANCEL_ALL_ORDERS.value,
+            "异常": cls.ERROR.value,
         }
+
+        return status_map.get(status_cn)
+
+    def convert(gm_status: int):
+        if gm_status == 0 or gm_status == 12 or gm_status == 9:
+            return OrderStatus.ERROR
+        if gm_status == 1 or gm_status == 10 or gm_status == 6:
+            return OrderStatus.NO_DEAL
+        if gm_status == 2:
+            return OrderStatus.PARTIAL_TRANSACTION
+        if gm_status == 3:
+            return OrderStatus.ALL_TRANSACTIONS
+        if gm_status == 5:
+            return OrderStatus.CANCEL_ALL_ORDERS
+        if gm_status == 8:
+            return OrderStatus.REJECTED
+
+        return OrderStatus.ERROR
 
 
 class Order:
@@ -43,14 +72,6 @@ class Order:
         self.oid = uuid.uuid4()
 
 
-class Trade:
-    def __init__(self, order: Order, price: float, volume: int):
-        self.order = order
-        self.price = price
-        self.volume = volume
-        self.tid = uuid.uuid4()
-
-
 class EntrustError(IntEnum):
     SUCCESS = 0
     FAILED_GENERIC = -1
@@ -66,3 +87,65 @@ class EntrustError(IntEnum):
             EntrustError.REACH_BUY_LIMIT: "不能在涨停板上买入",
             EntrustError.REACH_SELL_LIMIT: "不能在跌停板上卖出",
         }.get(self)
+
+
+class TradeOrder:
+    def __init__(self, eid: str, price: float, filled: int, recv_at: datetime.datetime):
+        self.eid = eid
+        self.price = price
+        self.avg_price = price  # 需要计算交易费用再均摊
+        self.filled = filled
+        self.recv_at = recv_at.strftime("%Y-%m-%d %H:%M:%S.%f")
+        self.value = price * filled
+
+    def toDict(self):
+        return {
+            "eid": self.eid,
+            "price": self.price,
+            "filled": self.filled,
+            "average_price": self.avg_price,
+            "time": self.recv_at,
+            "value": self.value,
+        }
+
+
+class TradeEvent:
+    def __init__(
+        self,
+        symbol: str,
+        bid_type: int,
+        sid: str,
+        avg_price: float,
+        order_side: int,
+        price: float,
+        status: int,
+        recv_at: datetime.datetime,
+        volume: int,
+        orders: list,
+    ):
+        self.code = symbol
+        self.bid_type = bid_type
+        self.entrust_no = sid
+        self.avg_price = avg_price  # 此价格计算方式待定
+        self.volume = volume
+        self.price = price
+        self.status = OrderStatus.convert(status)
+        self.order_side = order_side
+        self.recv_at = recv_at.strftime("%Y-%m-%d %H:%M:%S.%f")
+        self.orders = orders
+        self.filled = 0
+
+    def toDict(self):
+        return {
+            "code": self.code,
+            "price": self.price,
+            "volume": self.volume,
+            "order_side": self.order_side,
+            "bid_type": self.bid_type,
+            "entrust_no": self.entrust_no,
+            "status": self.status,
+            "filled": self.filled,
+            "average_price": self.avg_price,
+            "time": self.recv_at,
+            "trader_orders": self.orders,
+        }

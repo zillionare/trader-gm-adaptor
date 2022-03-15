@@ -227,7 +227,7 @@ class gm_order_status_change:
     order_id: str  # 委托柜台ID
     symbol: str  # 证券代码(市场.代码)如:SZSE.000001
     order_type: int  # 委托类型 参见
-    order_business: int  # 委托业务属性 参见
+    order_biz: int  # 委托业务属性 参见
     status: int  # 委托状态 参见
     rej_reason: int  # 委托拒绝原因 参见
     rej_detail: str  # 委托拒绝原因描述
@@ -246,11 +246,12 @@ class gm_order_status_change:
     # filled_volume(filled_vol),created_at,updated_at,sent_at,recv_at
     def __init__(self, dict_data):
         self.sid = dict_data["sid"]
-        self.scan_name = dict_data["scan_name"]
+        # self.scan_name = dict_data["scan_name"]
         self.cl_ord_id = dict_data["cl_ord_id"]
         self.order_id = dict_data["order_id"]
         self.symbol = stockcode_to_joinquant(dict_data["symbol"])
-        self.status = dict_data["status"]
+        self.status = int(dict_data["status"])
+        self.order_biz = int(dict_data["order_business(order_biz)"])
         self.rej_reason = int(dict_data["ord_rej_reason(rej_reason)"])
         self.rej_detail = dict_data["ord_rej_reason_detail(rej_detail)"]
         self.price = float(dict_data["price"])
