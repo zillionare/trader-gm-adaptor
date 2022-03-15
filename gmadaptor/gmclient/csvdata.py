@@ -139,6 +139,7 @@ class gm_order_status:
     def toDict(self):
         obj = {}
         obj["request_id"] = "xxxx"
+        obj["sid"] = self.sid
         obj["cid"] = self.cl_ord_id
         obj["code"] = self.symbol
         obj["name"] = ""

@@ -71,12 +71,15 @@ async def bp_mock_buy(request):
     price = request.json.get("price")
     volume = request.json.get("volume")
 
+    logger.info(f"buy, stock:{symbol}, vol:{volume}, price:{price}")
+
     result = handler.wrapper_buy(account_id, symbol, price, volume)
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
     order_id = result["data"]["cid"]
+    logger.info(f"buy, success, order id:{order_id}")
     return response.json(
         make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
@@ -96,7 +99,10 @@ async def bp_mock_market_buy(request):
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     # price = request.json.get("price")
+    limit_price = request.json.get("limit_price")
     volume = request.json.get("volume")
+
+    logger.info(f"market_buy, stock:{symbol}, vol:{volume}, limit_price:{limit_price}")
 
     result = handler.wrapper_market_buy(account_id, symbol, volume)
     if result["status"] != 200:
@@ -104,6 +110,7 @@ async def bp_mock_market_buy(request):
 
     # we can check result.status if this entrust success
     order_id = result["data"]["cid"]
+    logger.info(f"market_buy, success, order id:{order_id}")
     return response.json(
         make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
@@ -117,12 +124,15 @@ async def bp_mock_sell(request):
     price = request.json.get("price")
     volume = request.json.get("volume")
 
+    logger.info(f"sell, stock:{symbol}, vol:{volume}, price:{price}")
+
     result = handler.wrapper_sell(account_id, symbol, price, volume)
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
     order_id = result["data"]["cid"]
+    logger.info(f"sell, success, order id:{order_id}")
     return response.json(
         make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
@@ -134,7 +144,10 @@ async def bp_mock_market_sell(request):
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     # price = request.json.get("price")
+    limit_price = request.json.get("limit_price")
     volume = request.json.get("volume")
+
+    logger.info(f"market_sell, stock:{symbol}, vol:{volume}, limit_price:{limit_price}")
 
     result = handler.wrapper_market_sell(account_id, symbol, volume)
     if result["status"] != 200:
@@ -142,9 +155,52 @@ async def bp_mock_market_sell(request):
 
     # we can check result.status if this entrust success
     order_id = result["data"]["cid"]
+    logger.info(f"market_sell, success, order id:{order_id}")
     return response.json(
         make_response(0, "OK", {"request_id": request_id, "cid": order_id})
     )
+
+
+@bp_gm_adaptor.route("/cancel_entrust", methods=["POST"])
+async def bp_mock_cancel_entrust(request):
+    account_id = request.json.get("account_id")
+    request_id = request.headers.get("Request-ID")
+
+    # 股票代码只作为参考用，不参与委托撤销
+    symbol = request.json.get("security")
+    # 掘金文件单只支持SID关联委托，其他order id不可用
+    sid = request.json.get("cid")
+
+    logger.info("cancel_enturst, account_id: %s, sid: %s", account_id, sid)
+
+    result = handler.wrapper_cancel_enturst(account_id, symbol, sid)
+    last_status = result["data"]["status"]
+    return response.json(
+        make_response(0, "OK", {"request_id": request_id, "status": last_status})
+    )
+
+
+@bp_gm_adaptor.route("/cancel_all_entrusts", methods=["POST"])
+async def bp_mock_cancel_all_entrusts(request):
+    account_id = request.json.get("account_id")
+
+    logger.info("cancel_all_entrusts, account_id: %s", account_id)
+
+    handler.wrapper_cancel_all_enturst(account_id)
+    return response.json(make_response(0, "OK"))
+
+
+@bp_gm_adaptor.route("/today_all_entrusts", methods=["POST"])
+async def bp_mock_get_today_all_entrusts(request):
+    account_id = request.json.get("account_id")
+    # request_id = request.headers.get("Request-ID")
+
+    result = handler.wrapper_get_today_all_entrusts(account_id)
+    if result["status"] != 200:
+        return response.json(make_response(-1, result["msg"]))
+
+    order_list = result["data"]
+    return response.json(make_response(0, "OK", order_list))
 
 
 @bp_gm_adaptor.route("/today_entrusts", methods=["POST"])
@@ -171,31 +227,6 @@ async def bp_mock_get_today_trades(request):
 
     order_list = result["data"]
     return response.json(make_response(0, "OK", order_list))
-
-
-@bp_gm_adaptor.route("/cancel_entrust", methods=["POST"])
-async def bp_mock_cancel_entrust(request):
-    account_id = request.json.get("account_id")
-    request_id = request.headers.get("Request-ID")
-
-    # 股票代码只作为参考用，不参与委托撤销
-    symbol = request.json.get("security")
-    # 掘金文件单只支持SID关联委托，其他order id不可用
-    sid = request.json.get("cid")
-
-    result = handler.wrapper_cancel_enturst(account_id, symbol, sid)
-    last_status = result["data"]["status"]
-    return response.json(
-        make_response(0, "OK", {"request_id": request_id, "status": last_status})
-    )
-
-
-@bp_gm_adaptor.route("/cancel_all_entrusts", methods=["POST"])
-async def bp_mock_cancel_all_entrusts(request):
-    account_id = request.json.get("account_id")
-
-    handler.wrapper_cancel_all_enturst(account_id)
-    return response.json(make_response(0, "OK"))
 
 
 def initialize_blueprint(app: Sanic):

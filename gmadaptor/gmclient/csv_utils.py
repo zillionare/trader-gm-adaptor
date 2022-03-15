@@ -129,7 +129,7 @@ def csv_generate_order(
         lock.release()
 
 
-def csv_generate_cancel_order(account_id: str, symbol: str, sid_list: list):
+def csv_generate_cancel_order(account_id: str, symbol: str, order_list: list):
     # get account information
     acct_info = get_gm_account_info(account_id)
     if acct_info is None:
@@ -156,8 +156,8 @@ def csv_generate_cancel_order(account_id: str, symbol: str, sid_list: list):
             if add_head:
                 csvfile.write("sid,comment\n")
 
-            for sid in sid_list:
-                csvfile.write(f"{sid},comments,\n")
+            for order in order_list:
+                csvfile.write(f"{order.sid},comments,\n")
 
             # save to disk immediately
             csvfile.flush()
@@ -177,10 +177,10 @@ def csv_get_exec_report_data(rpt_file: str):
     with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = gm_exec_report(row)
-            print(f"read exec report line: {report.sid}")
+            logger.debug(f"read exec report line: {report.sid}")
             reports.append(report.toDict())
 
-    print("report cound: ", len(reports))
+    logger.debug("total report read: ", len(reports))
     return reports
 
 
@@ -196,7 +196,7 @@ def csv_get_order_status_change_data(status_file: str, sid: str):
     with open(status_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = gm_order_status_change(row)
-            print(f"read order status change dataline: {report.sid}")
+            # print(f"read order status change dataline: {report.sid}")
             # 应该获取时间最新的数据，返回给用户，暂时简化处理
             if sid == report.sid:
                 cl_ord_id = report.cl_ord_id
@@ -223,10 +223,12 @@ def csv_get_order_status(orders_file: str):
                 and ot.month == today.month
                 and ot.day == today.day
             ):
-                print(f"read order status of today: {order.cl_ord_id}")
+                logger.debug(
+                    f"read order status of today: {order.sid} -> {order.cl_ord_id}"
+                )
                 orders.append(order.toDict())
 
-    print("order cound: ", len(orders))
+    logger.debug("total orders read: ", len(orders))
     return orders
 
 
@@ -260,8 +262,10 @@ def csv_get_unfinished_entrusts_from_order_status(orders_file: str):
                     and order.status != 8
                     and order.status != 12
                 ):
-                    print("entrust to be canceled: %s  -> %d", order.sid, order.status)
-                    orders.append(order.sid)
+                    logger.debug(
+                        "entrust to be canceled: %s  -> %d", order.sid, order.status
+                    )
+                    orders.append(order)
 
-    print("entrust to be canceled: ", len(orders))
+    logger.debug("entrust to be canceled: ", len(orders))
     return orders
