@@ -123,6 +123,8 @@ class TradeEvent:
         avg_price: float,
         filled: int,
         order_id: str,
+        trade_fees: float,
+        reason: str,
         recv_at: datetime.datetime,
     ):
         self.code = symbol
@@ -136,6 +138,8 @@ class TradeEvent:
         self.avg_price = avg_price  # 此价格计算方式待定
         self.filled = filled
         self.order_id = order_id
+        self.reason = reason
+        self.trade_fees = trade_fees
         self.recv_at = recv_at.strftime("%Y-%m-%d %H:%M:%S.%f")
 
     def toDict(self):
@@ -151,5 +155,7 @@ class TradeEvent:
             "average_price": self.avg_price,
             "filled": self.filled,
             "eid": self.order_id,
+            "trade_fees": self.trade_fees,
+            "reason": self.reason,
             "recv_at": self.recv_at,
         }

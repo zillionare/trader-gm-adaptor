@@ -129,7 +129,7 @@ def csv_generate_order(
         lock.release()
 
 
-def csv_generate_cancel_order(account_id: str, symbol: str, order_list: list):
+def csv_generate_cancel_order(account_id: str, symbol: str, sid_list: list):
     # get account information
     acct_info = get_gm_account_info(account_id)
     if acct_info is None:
@@ -156,8 +156,8 @@ def csv_generate_cancel_order(account_id: str, symbol: str, order_list: list):
             if add_head:
                 csvfile.write("sid,comment\n")
 
-            for order in order_list:
-                csvfile.write(f"{order.sid},comments,\n")
+            for sid in sid_list:
+                csvfile.write(f"{sid},comments,\n")
 
             # save to disk immediately
             csvfile.flush()
@@ -215,7 +215,7 @@ def csv_get_exec_report_data_by_sid(rpt_file: str, sid: str):
 
 def csv_get_order_status_change_data(status_file: str, sid: str):
     if not path.exists(status_file):
-        logger.error("execution report file not found: %s", status_file)
+        logger.error("order status change file not found: %s", status_file)
         return None
 
     result_report = None
@@ -305,5 +305,5 @@ def csv_get_unfinished_entrusts_from_order_status(orders_file: str):
                     )
                     orders.append(order)
 
-    logger.debug("entrust to be canceled: ", len(orders))
+    logger.debug("entrust to be canceled: %d", len(orders))
     return orders

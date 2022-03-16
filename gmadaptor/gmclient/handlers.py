@@ -23,7 +23,7 @@ from gmadaptor.gmclient.csv_utils import (
     csv_get_order_status_change_data,
     csv_get_unfinished_entrusts_from_order_status,
 )
-from gmadaptor.gmclient.csvdata import gm_cash, gm_position
+from gmadaptor.gmclient.csvdata import gm_cash, gm_order_status, gm_position
 from gmadaptor.gmclient.wrapper import (
     get_gm_account_info,
     get_gm_in_csv_cancelorder,
@@ -101,10 +101,16 @@ def wrapper_trade_operation(
     timeout = 5000  # 默认5000毫秒
     while timeout > 0:
         result = csv_get_order_status_change_data(status_file, sid)
-        status = result["result"]
-        if status != 0:
+        if result is None:
+            return {
+                "status": 500,
+                "msg": "order status change file not found of this account",
+            }
+
+        result_status = result["result"]
+        if result_status != 0:
             report = result["report"]
-        if status == 2:
+        if result_status == 2:
             break
 
         sleep(100 / 1000)
@@ -114,9 +120,10 @@ def wrapper_trade_operation(
         return {"status": 500, "msg": "failed to get result of this entrust"}
 
     # 状态成功之后，再读取具体的成交记录，特指已成3，部成2等情况
+    status = report.status
     if status != 2 and status != 3:
         event = TradeEvent(
-            security,
+            report.symbol,
             0,
             volume,
             order_side,
@@ -127,6 +134,8 @@ def wrapper_trade_operation(
             0.0,
             0,
             report.order_id,
+            0,
+            report.rej_detail,
             report.recv_at,
         )
         return {"status": 200, "msg": "success", "data": event.toDict()}
@@ -138,6 +147,9 @@ def wrapper_trade_operation(
     timeout = 1000  # 默认1000毫秒
     while timeout > 0:
         result = csv_get_exec_report_data_by_sid(status_file, sid)
+        if result is None:
+            return {"status": 500, "msg": "exec report file not found of this account"}
+
         status = result["result"]
         if status != 0:
             exec_reports = result["reports"]
@@ -171,6 +183,8 @@ def wrapper_trade_operation(
         total_amount / total_volume,
         total_volume,
         report.order_id,
+        0,
+        "",
         recv_at,
     )
     return {"status": 200, "msg": "success", "data": event.toDict()}
@@ -195,23 +209,35 @@ def wrapper_cancel_enturst(account_id: str, security: str, sid: str):
     return {"status": 200, "msg": "success", "data": {"status": last_stataus}}
 
 
-def wrapper_cancel_all_enturst(account_id: str):
-    # 行为待定，取消所有委托，如果是当天所有未完成的委托，则需要逐个查找order_status.csv里面，所有未完成的委托
-    # 找到所有的sid之后，再写入cancel_order.csv文件中
+def wrapper_get_unfinished_entursts(account_id: str):
     # 条件分别为：SID有效，时间在今天，委托未完成（不包括已成，已撤，已过期）
     order_status_file = get_gm_out_csv_orderstatus(account_id)
-    logger.debug(f"cancel_all_enturst, order status file: {order_status_file}")
+    logger.debug(f"get_unfinished_entursts, order status file: {order_status_file}")
 
     entrusts = csv_get_unfinished_entrusts_from_order_status(order_status_file)
-    if entrusts is not None and len(entrusts) > 0:
-        result = csv_generate_cancel_order(account_id, "", entrusts)
-        if result is None:
-            return {
-                "status": 401,
-                "msg": "failed to append data to input file, check lock or file",
-            }
+    if entrusts is None:
+        return {"status": 500, "msg": "order status file not found of this account"}
 
-    return {"status": 200, "msg": "success"}
+    events = []
+    for entrust in entrusts:
+        event = TradeEvent(
+            entrust.symbol,
+            entrust.price,
+            entrust.volume,
+            entrust.order_business,
+            entrust.order_type,
+            entrust.created_at,
+            entrust.sid,
+            entrust.status,
+            0,
+            0,
+            entrust.order_id,
+            0,
+            "",
+            entrust.recv_at,
+        )
+        events.append(event.toDict())
+    return {"status": 200, "msg": "success", "data": events}
 
 
 # 以下3个接口暂为自用目的，Z trader server不对接
