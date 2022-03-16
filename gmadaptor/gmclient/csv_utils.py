@@ -190,24 +190,27 @@ def csv_get_exec_report_data_by_sid(rpt_file: str, sid: str):
         return None
 
     # ExecType_Trade = 15 # 成交(有效)
-    target_report = None
+    reports = []
+    exec_type = 0
+
     with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = gm_exec_report(row)
             logger.debug(f"read exec report line: {report.sid}")
             if sid == report.sid:
-                target_report = report
+                reports.append(report)
+                exec_type = report.exec_type
 
     # retry next time until timeout
-    if target_report is None:
+    if len(reports) == 0:
         return {"result": 0}
 
     exec_type = report.exec_type
     if exec_type == 15:
-        return {"result": 2, "report": target_report}
+        return {"result": 2, "reports": reports}
     else:
         # need retry
-        return {"result": 1, "report": target_report}
+        return {"result": 1, "reports": reports}
 
 
 def csv_get_order_status_change_data(status_file: str, sid: str):
@@ -233,14 +236,7 @@ def csv_get_order_status_change_data(status_file: str, sid: str):
 
     status = report.status
     # 执行完毕状态
-    if (
-        status == 2
-        or status == 3
-        or status == 5
-        or status == 8
-        or status == 9
-        or status == 12
-    ):
+    if status == 3 or status == 5 or status == 8 or status == 9 or status == 12:
         return {"result": 2, "report": result_report}
     else:
         # need retry

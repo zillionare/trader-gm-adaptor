@@ -90,50 +90,53 @@ class EntrustError(IntEnum):
 
 
 class TradeOrder:
-    def __init__(self, eid: str, price: float, filled: int, recv_at: datetime.datetime):
+    # 逐笔成交的记录，用于汇总计算
+
+    def __init__(
+        self,
+        eid: str,
+        price: float,
+        filled: int,
+        create_at: datetime.datetime,
+        recv_at: datetime.datetime,
+    ):
         self.eid = eid
         self.price = price
-        self.avg_price = price  # 需要计算交易费用再均摊
         self.filled = filled
-        self.recv_at = recv_at.strftime("%Y-%m-%d %H:%M:%S.%f")
-        self.value = price * filled
-
-    def toDict(self):
-        return {
-            "eid": self.eid,
-            "price": self.price,
-            "filled": self.filled,
-            "average_price": self.avg_price,
-            "time": self.recv_at,
-            "value": self.value,
-        }
+        self.create_at = create_at
+        self.recv_at = recv_at
 
 
 class TradeEvent:
+    # 委托结果，包括了成功和失败的集合
+
     def __init__(
         self,
         symbol: str,
-        bid_type: int,
-        sid: str,
-        avg_price: float,
-        order_side: int,
         price: float,
-        status: int,
-        recv_at: datetime.datetime,
         volume: int,
-        orders: list,
+        order_side: int,
+        bid_type: int,
+        create_at: datetime.datetime,
+        sid: str,
+        status: int,
+        avg_price: float,
+        filled: int,
+        order_id: str,
+        recv_at: datetime.datetime,
     ):
         self.code = symbol
-        self.bid_type = bid_type
-        self.entrust_no = sid
-        self.avg_price = avg_price  # 此价格计算方式待定
-        self.volume = volume
         self.price = price
-        self.status = OrderStatus.convert(status)
+        self.volume = volume
         self.order_side = order_side
+        self.bid_type = bid_type
+        self.create_at = create_at.strftime("%Y-%m-%d %H:%M:%S.%f")
+        self.entrust_no = sid
+        self.status = OrderStatus.convert(status)
+        self.avg_price = avg_price  # 此价格计算方式待定
+        self.filled = filled
+        self.order_id = order_id
         self.recv_at = recv_at.strftime("%Y-%m-%d %H:%M:%S.%f")
-        self.orders = orders
-        self.filled = 0
 
     def toDict(self):
         return {
@@ -142,10 +145,11 @@ class TradeEvent:
             "volume": self.volume,
             "order_side": self.order_side,
             "bid_type": self.bid_type,
+            "time": self.create_at,
             "entrust_no": self.entrust_no,
             "status": self.status,
-            "filled": self.filled,
             "average_price": self.avg_price,
-            "time": self.recv_at,
-            "trader_orders": self.orders,
+            "filled": self.filled,
+            "eid": self.order_id,
+            "recv_at": self.recv_at,
         }

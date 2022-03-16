@@ -75,69 +75,19 @@ def wrapper_get_positions(account_id: str):
     return {"status": 200, "msg": "success", "data": poses}
 
 
-def wrapper_normal_trade_op(
-    account_id: str, security: str, price: float, volume: int, order_side: OrderSide
-):
-    myquant_code = stockcode_to_myquant(security)
-
-    sid = csv_generate_order(
-        account_id, myquant_code, volume, order_side, BidType.LIMIT, price
-    )
-    if sid is None:
-        return {"status": 401, "msg": "failed to append data to input file"}
-
-    report = None
-
-    # get output file first
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    # print(f"exec report file: {status_file}")
-
-    timeout = 2000  # 默认2000毫秒
-    while timeout > 0:
-        result = csv_get_order_status_change_data(status_file, sid)
-        status = result["result"]
-        if status != 0:
-            report = result["report"]
-        if status == 2:
-            break
-
-        sleep(100 / 1000)
-        timeout -= 100
-
-    if report is None:
-        return {"status": 500, "msg": "failed to get result of this entrust"}
-
-    order = TradeOrder(report.order_id, report.price, report.filled_vol, report.recv_at)
-    event = TradeEvent(
-        report.symbol,
-        BidType.LIMIT,
-        report.sid,
-        report.price,
-        order_side,
-        report.price,
-        report.status,
-        report.recv_at,
-        report.volume,
-        [order],
-    )
-    return {"status": 200, "msg": "success", "data": event.toDict()}
-
-
-# 市价买入或者卖出
-def wrapper_market_trade_op(
+def wrapper_trade_operation(
     account_id: str,
     security: str,
     volume: int,
+    price: float,
     order_side: OrderSide,
+    bid_type: BidType,
     limit_price: float = None,
 ):
     myquant_code = stockcode_to_myquant(security)
 
-    # 市价成交暂定价格为0，根据实际客户端调整
-    price = 0
-
     sid = csv_generate_order(
-        account_id, myquant_code, volume, order_side, BidType.MARKET, price
+        account_id, myquant_code, volume, order_side, bid_type, price
     )
     if sid is None:
         return {"status": 401, "msg": "failed to append data to input file"}
@@ -148,7 +98,7 @@ def wrapper_market_trade_op(
     status_file = get_gm_out_csv_order_status_change(account_id)
     # print(f"exec report change file: {status_file}")
 
-    timeout = 2000  # 默认2000毫秒
+    timeout = 5000  # 默认5000毫秒
     while timeout > 0:
         result = csv_get_order_status_change_data(status_file, sid)
         status = result["result"]
@@ -163,40 +113,65 @@ def wrapper_market_trade_op(
     if report is None:
         return {"status": 500, "msg": "failed to get result of this entrust"}
 
-    # 状态成功之后，再读取具体的成交记录，特指已成，部成等情况
-    exec_report = None
+    # 状态成功之后，再读取具体的成交记录，特指已成3，部成2等情况
+    if status != 2 and status != 3:
+        event = TradeEvent(
+            security,
+            0,
+            volume,
+            order_side,
+            bid_type,
+            report.created_at,
+            report.sid,
+            report.status,
+            0.0,
+            0,
+            report.order_id,
+            report.recv_at,
+        )
+        return {"status": 200, "msg": "success", "data": event.toDict()}
+
+    exec_reports = None
     status_file = get_gm_out_csv_execreport(account_id)
     # print(f"exec report file: {status_file}")
 
-    timeout = 2000  # 默认2000毫秒
+    timeout = 1000  # 默认1000毫秒
     while timeout > 0:
         result = csv_get_exec_report_data_by_sid(status_file, sid)
         status = result["result"]
         if status != 0:
-            exec_report = result["report"]
+            exec_reports = result["reports"]
         if status == 2:
             break
 
         sleep(100 / 1000)
         timeout -= 100
 
-    if exec_report is None:
+    if exec_reports is None:
         return {"status": 500, "msg": "failed to get result of this entrust"}
 
-    order = TradeOrder(
-        exec_report.order_id, exec_report.price, exec_report.volume, exec_report.recv_at
-    )
+    # 最后完成交易的时间
+    recv_at = None
+    total_volume = 0
+    total_amount = 0.0  # 总资金量
+    for exec_report in exec_reports:
+        total_volume += exec_report.volume
+        total_amount += exec_report.volume * exec_report.price
+        recv_at = exec_report.recv_at
+
     event = TradeEvent(
-        report.symbol,
-        BidType.MARKET,
-        report.sid,
-        report.price,
+        security,
+        0,
+        volume,
         order_side,
-        report.price,
+        bid_type,
+        report.created_at,
+        report.sid,
         report.status,
-        report.recv_at,
-        report.volume,
-        [order],
+        total_amount / total_volume,
+        total_volume,
+        report.order_id,
+        recv_at,
     )
     return {"status": 200, "msg": "success", "data": event.toDict()}
 

@@ -196,6 +196,7 @@ class gm_exec_report:
         self.price = float(dict_data["price"])
         self.volume = int(dict_data["volume"])
         self.exec_type = int(dict_data["exec_type"])
+        self.created_at = datetime_conversion(dict_data["created_at"])
         self.recv_at = datetime_conversion(dict_data["recv_at"])
 
     def toDict(self):
@@ -257,8 +258,9 @@ class gm_order_status_change:
         self.price = float(dict_data["price"])
         self.volume = int(dict_data["volume"])
         self.filled_vol = int(dict_data["filled_volume(filled_vol)"])
+        self.created_at = datetime_conversion(dict_data["created_at"])
         self.recv_at = datetime_conversion(dict_data["recv_at"])
-        # 暂时不需要剩下3个时间参数
+        # 暂时不需要剩下2个时间参数
 
     def toDict(self):
         pass

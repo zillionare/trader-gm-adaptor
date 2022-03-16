@@ -6,7 +6,7 @@ from sanic import Blueprint, Sanic, request, response
 from sanic.exceptions import ServerError
 
 import gmadaptor.gmclient.handlers as handler
-from gmadaptor.common.types import OrderSide
+from gmadaptor.common.types import BidType, OrderSide
 from gmadaptor.gmclient.wrapper import check_gm_account
 from gmadaptor.httpserver.helper import check_request_token, make_response
 
@@ -69,8 +69,8 @@ async def bp_mock_buy(request):
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
 
-    result = handler.wrapper_normal_trade_op(
-        account_id, symbol, price, volume, OrderSide.BUY
+    result = handler.wrapper_trade_operation(
+        account_id, symbol, volume, price, OrderSide.BUY, BidType.LIMIT
     )
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
@@ -97,7 +97,9 @@ async def bp_mock_market_buy(request):
 
     logger.info(f"market_buy, stock:{symbol}, vol:{volume}, limit_price:{limit_price}")
 
-    result = handler.wrapper_market_trade_op(account_id, symbol, volume, OrderSide.BUY)
+    result = handler.wrapper_trade_operation(
+        account_id, symbol, volume, 0.0, OrderSide.BUY, BidType.MARKET
+    )
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
@@ -114,8 +116,8 @@ async def bp_mock_sell(request):
 
     logger.info(f"sell, stock:{symbol}, vol:{volume}, price:{price}")
 
-    result = handler.wrapper_normal_trade_op(
-        account_id, symbol, price, volume, OrderSide.SELL
+    result = handler.wrapper_trade_operation(
+        account_id, symbol, volume, price, OrderSide.SELL, BidType.LIMIT
     )
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
@@ -135,7 +137,9 @@ async def bp_mock_market_sell(request):
 
     logger.info(f"market_sell, stock:{symbol}, vol:{volume}, limit_price:{limit_price}")
 
-    result = handler.wrapper_market_trade_op(account_id, symbol, volume, OrderSide.SELL)
+    result = handler.wrapper_trade_operation(
+        account_id, symbol, volume, 0.0, OrderSide.SELL, BidType.MARKET
+    )
     if result["status"] != 200:
         return response.json(make_response(-1, result["msg"]))
 
