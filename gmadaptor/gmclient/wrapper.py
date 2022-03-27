@@ -41,6 +41,11 @@ def get_gm_out_csv_position(account_id: str):
 
 
 def get_gm_out_csv_execreport(account_id: str):
+    """委托执行回报
+        经过观察，该回报文件内的委托，都是成功状态的，
+        如果是异常状态，比如被拒绝，在order status change文件中有详细的信息，或者在order status里面有最终的结果
+    注意：此文件的更新速度比状态变化文件慢几秒中
+    """
     if account_id in account_list.keys():
         return path.normpath(path.join(gm_out_dir, account_id, "execution_report.csv"))
     else:
@@ -49,6 +54,9 @@ def get_gm_out_csv_execreport(account_id: str):
 
 
 def get_gm_out_csv_orderstatus(account_id: str):
+    """委托状态文件
+    每个委托均有对应的一条记录，并且更新到最后的状态，比如成功，失败，被拒等等
+    """
     if account_id in account_list.keys():
         return path.normpath(path.join(gm_out_dir, account_id, "order_status.csv"))
     else:
@@ -58,6 +66,10 @@ def get_gm_out_csv_orderstatus(account_id: str):
 
 # order_status_change
 def get_gm_out_csv_order_status_change(account_id: str):
+    """订单状态变化跟踪文件
+    委托的变化清单，从已报到后续各种状态，一个委托存在多条记录的情况
+    此文件更新速度最快，优先通过此文件获取委托提交后的信息
+    """
     if account_id in account_list.keys():
         return path.normpath(
             path.join(gm_out_dir, account_id, "order_status_change.csv")

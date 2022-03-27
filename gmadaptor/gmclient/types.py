@@ -22,7 +22,7 @@ from enum import IntEnum
 """
 
 
-class OrderBiz(IntEnum):
+class GMOrderBiz(IntEnum):
     BUY = 1
     SELL = 2
 
@@ -43,7 +43,7 @@ order_type 委托类型
 """
 
 
-class OrderType(IntEnum):
+class GMOrderType(IntEnum):
     LIMITPRICE = 1
     FILLANDKILL = 22
     FILLORKILL = 23
@@ -66,7 +66,7 @@ ExecType_CancelRejected = 19          # 撤单被拒绝  (有效)
 """
 
 
-class ExecType(IntEnum):
+class GMExecType(IntEnum):
     UNKNOWN = 0
     NEW = 1
     CANCELED = 5
@@ -94,7 +94,7 @@ OrderStatus_Expired = 12              # 已过期
 """
 
 
-class OrderStatus(IntEnum):
+class GMOrderStatus(IntEnum):
     UNKNOWN = 0
     NEW = 1
     PARTIALFILLED = 2

@@ -37,7 +37,7 @@ def start():
     server_config = cfg4py.get_instance()
 
     loglevel = server_config.log_level
-    logfile = path.normpath(path.join(path.dirname(__file__), "gm-adaptor.log"))
+    logfile = path.normpath(path.join(path.dirname(__file__), "server.log"))
     init_logger(logfile, loglevel)
     logger.info("trader-gm-adpator starts")
 

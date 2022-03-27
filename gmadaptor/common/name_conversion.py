@@ -21,3 +21,13 @@ def stockcode_to_myquant(stock: str):
     elif sec_name.find("XSHE") != -1:
         return f"SZSE.{stock_num}"
     return stock
+
+
+def get_stock_location(stock: str):
+    # SHSE.xxx, SZSE.xxx -> 1, 2
+    (stock_num, sec_name) = stock.split(".")
+    if sec_name.find("SHSE") != -1:
+        return 1  # shanghai
+    elif sec_name.find("SZSE") != -1:
+        return 2
+    return None

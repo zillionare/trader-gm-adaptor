@@ -26,3 +26,27 @@ def make_response(
         "msg": err_msg,
         "data": data,
     }
+
+
+def calculate_timeout_in_ms(
+    timeout: float, min_val: float = 0.5, default_val: float = 2
+) -> int:
+    """计算超时参数
+
+    Args:
+        timeout (float): 用户传入的超时秒数
+        min_val (float): 最小的秒数
+        default_val (float): 默认的秒数
+
+    Returns:
+        int: 返回计算好的毫秒数
+    """
+
+    if timeout is None:
+        timeout_in_ms = default_val * 1000
+    elif timeout < min_val:
+        timeout_in_ms = min_val * 1000
+    else:
+        timeout_in_ms = timeout * 1000
+
+    return timeout_in_ms

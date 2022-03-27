@@ -13,17 +13,29 @@ from gmadaptor.common.name_conversion import (
     stockcode_to_joinquant,
     stockcode_to_myquant,
 )
-from gmadaptor.common.types import BidType, OrderSide, TradeEvent, TradeOrder
+from gmadaptor.common.types import (
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    TradeEvent,
+    TradeOrder,
+)
 from gmadaptor.gmclient.csv_utils import (
     csv_generate_cancel_order,
     csv_generate_order,
     csv_get_exec_report_data,
     csv_get_exec_report_data_by_sid,
     csv_get_order_status,
-    csv_get_order_status_change_data,
+    csv_get_order_status_change_data_by_sid,
+    csv_get_order_status_change_data_by_sidlist,
     csv_get_unfinished_entrusts_from_order_status,
 )
-from gmadaptor.gmclient.csvdata import gm_cash, gm_order_status, gm_position
+from gmadaptor.gmclient.csvdata import GMCash, GMExecReport, GMOrderReport, GMPosition
+from gmadaptor.gmclient.heper_functions import (
+    helper_get_exec_reports_by_sid,
+    helper_load_trade_event,
+)
+from gmadaptor.gmclient.types import GMExecType, GMOrderBiz, GMOrderStatus, GMOrderType
 from gmadaptor.gmclient.wrapper import (
     get_gm_account_info,
     get_gm_in_csv_cancelorder,
@@ -44,16 +56,17 @@ def wrapper_get_balance(account_id: str):
     if out_dir is None:
         return {"status": 401, "msg": "no output file found"}
 
-    mycash = None
+    cash_in_csv = None
     # target csv file has BOM at the begining, using utf-8-sig instead of utf-8
     with open(out_dir, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
-            mycash = row
+            cash_in_csv = row
 
-    if mycash is None:
+    if cash_in_csv is None:
         return {"status": 401, "msg": "no data in cash file"}
 
-    return {"status": 200, "msg": "success", "data": gm_cash(mycash).toDict()}
+    acct_cash = GMCash(cash_in_csv)
+    return {"status": 200, "msg": "success", "data": acct_cash.toDict()}
 
 
 def wrapper_get_positions(account_id: str):
@@ -66,11 +79,8 @@ def wrapper_get_positions(account_id: str):
     # target csv file has BOM at the begining, using utf-8-sig instead of utf-8
     with open(out_dir, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
-            pos = gm_position(row)
+            pos = GMPosition(row)
             poses.append(pos.toDict())
-
-    if len(poses) == 0:
-        return {"status": 401, "msg": "no data in position file"}
 
     return {"status": 200, "msg": "success", "data": poses}
 
@@ -81,26 +91,32 @@ def wrapper_trade_operation(
     volume: int,
     price: float,
     order_side: OrderSide,
-    bid_type: BidType,
+    order_type: OrderType,
     limit_price: float = None,
+    timeout_in_action: float = 1000,  # 毫秒
 ):
     myquant_code = stockcode_to_myquant(security)
 
+    gm_order_side = GMOrderBiz.BUY
+    if order_side == OrderSide.SELL:
+        gm_order_side = GMOrderBiz.SELL
+
+    gm_order_type = GMOrderType.LIMITPRICE
+    # 市价成交，无须价格，除非是限价委托（即时成交，剩余转限价）
+    if order_type == OrderType.MARKET:
+        gm_order_type = GMOrderType.BESTCANCEL
+
     sid = csv_generate_order(
-        account_id, myquant_code, volume, order_side, bid_type, price
+        account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
     if sid is None:
         return {"status": 401, "msg": "failed to append data to input file"}
+    # sid = "ac3c92a6-a680-11ec-a4d3-a5d7002ce96d"
 
     report = None
-
     # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    # print(f"exec report change file: {status_file}")
-
-    timeout = 5000  # 默认5000毫秒
-    while timeout > 0:
-        result = csv_get_order_status_change_data(status_file, sid)
+    while timeout_in_action > 0:
+        result = csv_get_order_status_change_data_by_sid(account_id, sid)
         if result is None:
             return {
                 "status": 500,
@@ -108,13 +124,13 @@ def wrapper_trade_operation(
             }
 
         result_status = result["result"]
-        if result_status != 0:
+        if result_status != -1:  # 保存查询到的结果，继续查看
             report = result["report"]
-        if result_status == 2:
+        if result_status == 0:  # 获取完结状态的信息
             break
 
         sleep(100 / 1000)
-        timeout -= 100
+        timeout_in_action -= 200
 
     if report is None:
         return {"status": 500, "msg": "failed to get result of this entrust"}
@@ -122,146 +138,146 @@ def wrapper_trade_operation(
     # 状态成功之后，再读取具体的成交记录，特指已成3，部成2等情况
     status = report.status
     if status != 2 and status != 3:
-        event = TradeEvent(
-            report.symbol,
-            0,
-            volume,
-            order_side,
-            bid_type,
-            report.created_at,
-            report.sid,
-            report.status,
-            0.0,
-            0,
-            report.order_id,
-            0,
-            report.rej_detail,
-            report.recv_at,
-        )
+        event = helper_load_trade_event(report)
         return {"status": 200, "msg": "success", "data": event.toDict()}
 
     exec_reports = None
-    status_file = get_gm_out_csv_execreport(account_id)
-    # print(f"exec report file: {status_file}")
-
-    timeout = 1000  # 默认1000毫秒
-    while timeout > 0:
-        result = csv_get_exec_report_data_by_sid(status_file, sid)
+    while timeout_in_action > 0:
+        result = csv_get_exec_report_data_by_sid(account_id, sid)
         if result is None:
             return {"status": 500, "msg": "exec report file not found of this account"}
 
         status = result["result"]
-        if status != 0:
+        if status != -1:  # save result, then retry
             exec_reports = result["reports"]
-        if status == 2:
+        if status == 0:  # done
             break
 
         sleep(100 / 1000)
-        timeout -= 100
+        timeout_in_action -= 200
 
-    if exec_reports is None:
+    if exec_reports is None:  # already check the size
+        # 查询不到结果，留给z trade server后续校正
         return {"status": 500, "msg": "failed to get result of this entrust"}
 
-    # 最后完成交易的时间
-    recv_at = None
-    total_volume = 0
-    total_amount = 0.0  # 总资金量
-    for exec_report in exec_reports:
-        total_volume += exec_report.volume
-        total_amount += exec_report.volume * exec_report.price
-        recv_at = exec_report.recv_at
+    event = helper_load_trade_event(report)
+    helper_get_exec_reports_by_sid(exec_reports, event)
+    if event.status == OrderStatus.ALL_TRANSACTIONS and event.volume != event.filled:
+        # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
+        event.filled = 0
+        event.avg_price = 0
+        event.trade_fees = 0
 
-    event = TradeEvent(
-        security,
-        0,
-        volume,
-        order_side,
-        bid_type,
-        report.created_at,
-        report.sid,
-        report.status,
-        total_amount / total_volume,
-        total_volume,
-        report.order_id,
-        0,
-        "",
-        recv_at,
-    )
     return {"status": 200, "msg": "success", "data": event.toDict()}
 
 
-def wrapper_cancel_enturst(account_id: str, security: str, sid: str):
-    myquant_code = stockcode_to_myquant(security)
+def wrapper_cancel_entursts(account_id: str, sid_list):
+    # 构建撤销委托的数组
+    if sid_list is None or (not isinstance(sid_list, list)):
+        return {"status": 401, "msg": "only entrust list accepted"}
 
-    sid_list = [sid]
-    sid = csv_generate_cancel_order(account_id, myquant_code, sid_list)
-    if sid is None:
+    result = csv_generate_cancel_order(account_id, sid_list)
+    if result != 0:
         return {
             "status": 401,
             "msg": "failed to append data to input file, check lock or file",
         }
 
-    sleep(0.2)
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    logger.debug(f"cancel_enturst, exec report file: {status_file}")
-    last_stataus = csv_get_order_status_change_data(status_file, sid)
+    reports = {}
+    timeout_in_action = 2000  # 默认等待2000毫秒
+    while timeout_in_action > 0:
+        result = csv_get_order_status_change_data_by_sidlist(account_id, sid_list)
+        if result is None:
+            return {
+                "status": 500,
+                "msg": "order status change file not found of this account",
+            }
 
-    return {"status": 200, "msg": "success", "data": {"status": last_stataus}}
+        result_status = result["result"]
+        if result_status != -1:  # 保存查询到的结果
+            reports = result["reports"]
+
+        if result_status == 0:  # 获取完结状态的信息
+            break
+
+        sleep(100 / 1000)
+        timeout_in_action -= 200
+
+    # 取出所有执行报告中的委托数据
+    all_exec_reports = csv_get_exec_report_data(account_id)
+    if all_exec_reports is None:
+        # 没能拿到详细的执行数据，撤销的委托中的成交数据为0，待下次查询
+        all_exec_reports = []
+
+    result_events = {}
+    # 撤销委托的on_order_status数据里面，没有成交信息
+    for report in reports.values():
+        event = helper_load_trade_event(report)
+        # 装载执行回报中的数据
+        helper_get_exec_reports_by_sid(all_exec_reports, event)
+        result_events[event.entrust_no] = event.toDict()
+
+    return {"status": 200, "msg": "OK", "data": result_events}
+
+
+def wrapper_get_today_all_entrusts(account_id: str):
+    # 取出所有日内委托数据
+    all_entrusts = csv_get_order_status(account_id)
+    if all_entrusts is None:
+        return {"status": 500, "msg": "order status file not found of this account"}
+
+    # 取出所有执行报告中的委托数据
+    all_exec_reports = csv_get_exec_report_data(account_id)
+    if all_exec_reports is None:
+        # 没能拿到详细的执行数据，如果对应的委托为2或者3，此次查询的结果应该放弃，待下次查询
+        all_exec_reports = []
+
+    result_events = {}
+    for entrust in all_entrusts:
+        event = helper_load_trade_event(entrust)
+        event_status = event.status
+        if event_status == OrderStatus.ERROR or event_status == OrderStatus.NO_DEAL:
+            # 无成交数据返回的情况
+            result_events[event.entrust_no] = event.toDict()
+            continue
+
+        # 装载执行回报中的数据
+        helper_get_exec_reports_by_sid(all_exec_reports, event)
+        if (
+            event.status == OrderStatus.ALL_TRANSACTIONS
+            and event.volume != event.filled
+        ):
+            # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
+            event.filled = 0
+            event.avg_price = 0
+            event.trade_fees = 0
+        result_events[event.entrust_no] = event.toDict()
+
+    return {"status": 200, "msg": "success", "data": result_events}
+
+
+# 以下3个接口暂为自用目的，Z trade server不对接
 
 
 def wrapper_get_unfinished_entursts(account_id: str):
     # 条件分别为：SID有效，时间在今天，委托未完成（不包括已成，已撤，已过期）
-    order_status_file = get_gm_out_csv_orderstatus(account_id)
-    logger.debug(f"get_unfinished_entursts, order status file: {order_status_file}")
-
-    entrusts = csv_get_unfinished_entrusts_from_order_status(order_status_file)
+    entrusts = csv_get_unfinished_entrusts_from_order_status(account_id)
     if entrusts is None:
         return {"status": 500, "msg": "order status file not found of this account"}
 
-    events = []
+    datalist = []
     for entrust in entrusts:
-        event = TradeEvent(
-            entrust.symbol,
-            entrust.price,
-            entrust.volume,
-            entrust.order_business,
-            entrust.order_type,
-            entrust.created_at,
-            entrust.sid,
-            entrust.status,
-            0,
-            0,
-            entrust.order_id,
-            0,
-            "",
-            entrust.recv_at,
-        )
-        events.append(event.toDict())
-    return {"status": 200, "msg": "success", "data": events}
-
-
-# 以下3个接口暂为自用目的，Z trader server不对接
-
-
-def wrapper_get_today_all_entrusts(account_id: str):
-    order_status_file = get_gm_out_csv_orderstatus(account_id)
-    logger.debug(f"get_today_all_entrusts, order status file: {order_status_file}")
-
-    entrusts = csv_get_order_status(order_status_file)
-    return {"status": 200, "msg": "success", "data": entrusts}
-
-
-def wrapper_get_today_entrusts(account_id: str):
-    order_status_file = get_gm_out_csv_orderstatus(account_id)
-    logger.debug(f"get_today_entrusts, order status file: {order_status_file}")
-
-    entrusts = csv_get_unfinished_entrusts_from_order_status(order_status_file)
-    return {"status": 200, "msg": "success", "data": entrusts}
+        datalist.append(entrust.toDict())
+    return {"status": 200, "msg": "success", "data": datalist}
 
 
 def wrapper_get_today_trades(account_id: str):
-    orders_file = get_gm_out_csv_execreport(account_id)
-    logger.debug(f"get_today_trades, execution report file: {orders_file}")
+    # 取出所有的执行报告，均为交易成功的委托，买或者卖
+    reports = csv_get_exec_report_data(account_id)
+    if reports is None:
+        return {"status": 500, "msg": "execution report file not found of this account"}
 
-    orders = csv_get_exec_report_data(orders_file)
-    return {"status": 200, "msg": "success", "data": orders}
+    datalist = []
+    for report in reports:
+        datalist.append(report.toDict())
+    return {"status": 200, "msg": "success", "data": datalist}
