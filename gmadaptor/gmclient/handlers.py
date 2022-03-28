@@ -32,8 +32,14 @@ from gmadaptor.gmclient.csv_utils import (
 )
 from gmadaptor.gmclient.csvdata import GMCash, GMExecReport, GMOrderReport, GMPosition
 from gmadaptor.gmclient.heper_functions import (
+    helper_get_data_from_exec_reports,
     helper_get_exec_reports_by_sid,
+    helper_get_order_from_status_change_file,
+    helper_get_orders_from_status_change_by_sidlist,
     helper_load_trade_event,
+    helper_reset_event,
+    helper_set_gm_order_side,
+    helper_set_gm_order_type,
 )
 from gmadaptor.gmclient.types import GMExecType, GMOrderBiz, GMOrderStatus, GMOrderType
 from gmadaptor.gmclient.wrapper import (
@@ -96,77 +102,37 @@ def wrapper_trade_operation(
     timeout_in_action: float = 1000,  # 毫秒
 ):
     myquant_code = stockcode_to_myquant(security)
-
-    gm_order_side = GMOrderBiz.BUY
-    if order_side == OrderSide.SELL:
-        gm_order_side = GMOrderBiz.SELL
-
-    gm_order_type = GMOrderType.LIMITPRICE
-    # 市价成交，无须价格，除非是限价委托（即时成交，剩余转限价）
-    if order_type == OrderType.MARKET:
-        gm_order_type = GMOrderType.BESTCANCEL
+    gm_order_side = helper_set_gm_order_side(order_side)
+    gm_order_type = helper_set_gm_order_type(order_type)
 
     sid = csv_generate_order(
         account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
     if sid is None:
         return {"status": 401, "msg": "failed to append data to input file"}
-    # sid = "ac3c92a6-a680-11ec-a4d3-a5d7002ce96d"
+    sid = "faf98b08-a67e-11ec-a4d3-a5d7002ce96d"
 
-    report = None
+    params = {"timeout": timeout_in_action}
     # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
-    while timeout_in_action > 0:
-        result = csv_get_order_status_change_data_by_sid(account_id, sid)
-        if result is None:
-            return {
-                "status": 500,
-                "msg": "order status change file not found of this account",
-            }
-
-        result_status = result["result"]
-        if result_status != -1:  # 保存查询到的结果，继续查看
-            report = result["report"]
-        if result_status == 0:  # 获取完结状态的信息
-            break
-
-        sleep(100 / 1000)
-        timeout_in_action -= 200
-
+    report = helper_get_order_from_status_change_file(account_id, sid, params)
+    timeout_in_action = params["timeout"]
     if report is None:
         return {"status": 500, "msg": "failed to get result of this entrust"}
 
+    # 准备返回数据
+    event = helper_load_trade_event(report)
     # 状态成功之后，再读取具体的成交记录，特指已成3，部成2等情况
     status = report.status
     if status != 2 and status != 3:
-        event = helper_load_trade_event(report)
         return {"status": 200, "msg": "success", "data": event.toDict()}
 
-    exec_reports = None
-    while timeout_in_action > 0:
-        result = csv_get_exec_report_data_by_sid(account_id, sid)
-        if result is None:
-            return {"status": 500, "msg": "exec report file not found of this account"}
-
-        status = result["result"]
-        if status != -1:  # save result, then retry
-            exec_reports = result["reports"]
-        if status == 0:  # done
-            break
-
-        sleep(100 / 1000)
-        timeout_in_action -= 200
-
+    # 读取成交记录
+    exec_reports = helper_get_data_from_exec_reports(
+        account_id, sid, event, timeout_in_action
+    )
     if exec_reports is None:  # already check the size
         # 查询不到结果，留给z trade server后续校正
         return {"status": 500, "msg": "failed to get result of this entrust"}
-
-    event = helper_load_trade_event(report)
-    helper_get_exec_reports_by_sid(exec_reports, event)
-    if event.status == OrderStatus.ALL_TRANSACTIONS and event.volume != event.filled:
-        # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
-        event.filled = 0
-        event.avg_price = 0
-        event.trade_fees = 0
 
     return {"status": 200, "msg": "success", "data": event.toDict()}
 
@@ -183,25 +149,8 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
             "msg": "failed to append data to input file, check lock or file",
         }
 
-    reports = {}
-    timeout_in_action = 2000  # 默认等待2000毫秒
-    while timeout_in_action > 0:
-        result = csv_get_order_status_change_data_by_sidlist(account_id, sid_list)
-        if result is None:
-            return {
-                "status": 500,
-                "msg": "order status change file not found of this account",
-            }
-
-        result_status = result["result"]
-        if result_status != -1:  # 保存查询到的结果
-            reports = result["reports"]
-
-        if result_status == 0:  # 获取完结状态的信息
-            break
-
-        sleep(100 / 1000)
-        timeout_in_action -= 200
+    # 从状态更新文件中读取撤销结果
+    reports = helper_get_orders_from_status_change_by_sidlist(account_id, sid_list)
 
     # 取出所有执行报告中的委托数据
     all_exec_reports = csv_get_exec_report_data(account_id)

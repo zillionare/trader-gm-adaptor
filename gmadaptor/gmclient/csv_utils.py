@@ -149,31 +149,23 @@ def csv_get_exec_report_data_by_sid(account_id: str, sid: str):
         logger.error("execution report file not found: %s", rpt_file)
         return None
 
-    # ExecType_Trade = 15 # 成交(有效)
     reports = []
-    exec_type = 0
-
     with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = GMExecReport(row)
             if sid == report.sid:
-                reports.append(report)
-                exec_type = report.exec_type
-                if exec_type != 15:
+                if report.exec_type != 15:  # ExecType_Trade = 15 # 成交(有效)
                     logger.warning(
                         f"exec report(!15): {report.sid}, {report.symbol}, {report.price}, {report.volume}, {report.exec_type}"
                     )
+                else:
+                    reports.append(report)
 
     # retry next time until timeout
     if len(reports) == 0:  # not found
         return {"result": -1}
 
-    exec_type = report.exec_type
-    if exec_type == 15:
-        return {"result": 0, "reports": reports}
-    else:
-        # need retry
-        return {"result": 1, "reports": reports}
+    return {"result": 0, "reports": reports}
 
 
 def csv_get_order_status_change_data_by_sid(account_id: str, sid: str):
