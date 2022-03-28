@@ -110,7 +110,7 @@ def wrapper_trade_operation(
     )
     if sid is None:
         return {"status": 401, "msg": "failed to append data to input file"}
-    sid = "faf98b08-a67e-11ec-a4d3-a5d7002ce96d"
+    # sid = "faf98b08-a67e-11ec-a4d3-a5d7002ce96d"
 
     params = {"timeout": timeout_in_action}
     # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
