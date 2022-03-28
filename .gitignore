@@ -107,5 +107,5 @@ ENV/
 # mkdocs build dir
 site/
 
-# config
+# skip config folder
 config/
