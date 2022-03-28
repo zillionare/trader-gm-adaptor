@@ -4,7 +4,6 @@ from typing import Dict, List, Union
 
 import cfg4py
 from cfg4py.config import Config
-from expiringdict import ExpiringDict
 
 
 def check_request_token(access_token):

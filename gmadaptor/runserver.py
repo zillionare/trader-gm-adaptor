@@ -15,7 +15,7 @@ def init_logger(filename: str, loglevel: int):
     LOG_FORMAT = r"%(asctime)s %(levelname)s %(filename)s[line:%(lineno)d] %(message)s"
     DATE_FORMAT = r"%Y-%m-%d  %H:%M:%S %a"
 
-    fh = logging.FileHandler(filename, mode="a+")
+    fh = logging.FileHandler(filename, mode="a+", encoding="utf-8")
     fh.setLevel(loglevel)
     formatter = logging.Formatter(fmt=LOG_FORMAT, datefmt=DATE_FORMAT)
     fh.setFormatter(formatter)
