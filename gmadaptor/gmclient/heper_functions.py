@@ -51,14 +51,14 @@ def helper_calculate_trade_fees(amount, fees_info, order_side):
     transfer_fee: 0.002 # 过户费，万分之0.2
     minimum_cost: 5.0 # 最低佣金
     """
-    comission = amount * (fees_info.comission / 100)
+    comission = amount * (fees_info.comission / 10000)
     if comission < fees_info.minimum_cost:
         comission = fees_info.minimum_cost
-    transfer_fee = amount * (fees_info.transfer_fee / 100)
+    transfer_fee = amount * (fees_info.transfer_fee / 10000)
 
     stamp_duty = 0
     if order_side == 2:
-        stamp_duty = amount * (fees_info.stamp_duty / 100)
+        stamp_duty = amount * (fees_info.stamp_duty / 10000)
 
     return comission + transfer_fee + stamp_duty
 
