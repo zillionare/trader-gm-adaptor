@@ -159,16 +159,11 @@ def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action)
         if status == 0:  # 收集到了至少一条数据
             helper_get_exec_reports_by_sid(exec_reports, event)
             if event.status == OrderStatus.ALL_TRANSACTIONS:
-                if event.volume != event.filled:
-                    # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
-                    helper_reset_event(event)
-                else:
+                if event.volume == event.filled:  # 已完成的委托，但是成交数据不全，继续等待
                     break  # 结束循环
 
             if event.status == OrderStatus.PARTIAL_TRANSACTION:
-                if event.volume < event.filled:
-                    logger.error("order volume is less than filled volume")
-                    helper_reset_event(event)
+                if event.filled > 0:  # 部分成交的情况下，只要有数据，就返回
                     break
 
         sleep(100 / 1000)
