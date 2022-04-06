@@ -142,7 +142,9 @@ def helper_get_order_from_status_change_file(account_id, sid, params):
     return report
 
 
-def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action):
+def helper_get_data_from_exec_reports(
+    account_id, sid, event, timeout_in_action, filled_vol
+):
     exec_reports = None
 
     while timeout_in_action > 0:
@@ -163,7 +165,7 @@ def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action)
                     break  # 结束循环
 
             if event.status == OrderStatus.PARTIAL_TRANSACTION:
-                if event.filled > 0:  # 部分成交的情况下，只要有数据，就返回
+                if event.filled >= filled_vol:  # 部分成交的情况下，至少要大于委托状态里面的成交量
                     break
 
         sleep(100 / 1000)

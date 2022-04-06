@@ -128,7 +128,7 @@ def wrapper_trade_operation(
 
     # 读取成交记录
     exec_reports = helper_get_data_from_exec_reports(
-        account_id, sid, event, timeout_in_action
+        account_id, sid, event, timeout_in_action, report.filled_vol
     )
     if exec_reports is None:  # already check the size
         # 查询不到结果，留给z trade server后续校正
