@@ -1,55 +1,39 @@
 # -*- coding: utf-8 -*-
 # @Author   : henry
 # @Time     : 2022-03-09 15:08
-import asyncio
 import csv
 import logging
-from ast import While
 from time import sleep
 
-import cfg4py
 from cfg4py.config import Config
 from gmadaptor.common.name_conversion import (
-    stockcode_to_joinquant,
     stockcode_to_myquant,
 )
 from gmadaptor.common.types import (
     OrderSide,
     OrderStatus,
     OrderType,
-    TradeEvent,
-    TradeOrder,
 )
 from gmadaptor.gmclient.csv_utils import (
     csv_generate_cancel_order,
     csv_generate_order,
     csv_get_exec_report_data,
-    csv_get_exec_report_data_by_sid,
+    csv_get_exec_report_data_by_sidlist,
     csv_get_order_status,
-    csv_get_order_status_change_data_by_sid,
-    csv_get_order_status_change_data_by_sidlist,
     csv_get_unfinished_entrusts_from_order_status,
 )
 from gmadaptor.gmclient.csvdata import GMCash, GMExecReport, GMOrderReport, GMPosition
 from gmadaptor.gmclient.heper_functions import (
     helper_get_data_from_exec_reports,
-    helper_get_exec_reports_by_sid,
+    helper_sum_exec_reports_by_sid,
     helper_get_order_from_status_change_file,
     helper_get_orders_from_status_change_by_sidlist,
     helper_load_trade_event,
-    helper_reset_event,
     helper_set_gm_order_side,
     helper_set_gm_order_type,
 )
-from gmadaptor.gmclient.types import GMExecType, GMOrderBiz, GMOrderStatus, GMOrderType
 from gmadaptor.gmclient.wrapper import (
-    get_gm_account_info,
-    get_gm_in_csv_cancelorder,
-    get_gm_in_csv_order,
     get_gm_out_csv_cash,
-    get_gm_out_csv_execreport,
-    get_gm_out_csv_order_status_change,
-    get_gm_out_csv_orderstatus,
     get_gm_out_csv_position,
 )
 
@@ -93,12 +77,8 @@ def wrapper_get_positions(account_id: str):
 
 def wrapper_trade_operation(
     account_id: str,
-    security: str,
-    volume: int,
-    price: float,
-    order_side: OrderSide,
-    order_type: OrderType,
-    limit_price: float = None,
+    security: str, volume: int, price: float,
+    order_side: OrderSide, order_type: OrderType, limit_price: float = None,
     timeout_in_action: float = 1000,  # 毫秒
 ):
     myquant_code = stockcode_to_myquant(security)
@@ -108,29 +88,36 @@ def wrapper_trade_operation(
     sid = csv_generate_order(
         account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
-    if sid is None:
-        return {"status": 401, "msg": "failed to append data to input file"}
     # sid = "faf98b08-a67e-11ec-a4d3-a5d7002ce96d"
+    if sid is None:
+        return {"status": 401, "msg": "failed to append data to input file"}    
 
     params = {"timeout": timeout_in_action}
     # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
-    report = helper_get_order_from_status_change_file(account_id, sid, params)
-    timeout_in_action = params["timeout"]
-    if report is None:
+    reports = helper_get_order_from_status_change_file(account_id, sid, params)
+    if reports is None:
+        return {"status": 500, "msg": "委托状态变化文件没找到"}
+    if len(reports) == 0:
         return {"status": 500, "msg": "failed to get result of this entrust"}
 
-    # 准备返回数据
+    report = reports[0]
+    timeout_in_action = params["timeout"]  # 下个操作的超时时间
+
+    # 读取状态变化文件中的委托信息
     event = helper_load_trade_event(report)
-    # 状态成功之后，再读取具体的成交记录，特指已成3，部成2等情况
+
+    # 状态不是（已成3，部成2）情况的委托，直接返回结果
     status = report.status
     if status != 2 and status != 3:
         return {"status": 200, "msg": "success", "data": event.toDict()}
 
-    # 读取成交记录
+    # 2和3的委托，再读取成交记录
     exec_reports = helper_get_data_from_exec_reports(
         account_id, sid, event, timeout_in_action
     )
-    if exec_reports is None:  # already check the size
+    if exec_reports is None:
+        return {"status": 500, "msg": "执行回报文件没找到"}
+    if len(exec_reports) == 0:
         # 查询不到结果，留给z trade server后续校正
         return {"status": 500, "msg": "failed to get result of this entrust"}
 
@@ -149,21 +136,25 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
             "msg": "failed to append data to input file, check lock or file",
         }
 
-    # 从状态更新文件中读取撤销结果
+    # 从状态更新文件中读取撤销结果，{}字典
     reports = helper_get_orders_from_status_change_by_sidlist(account_id, sid_list)
+    if reports is None:
+        return {"status": 500, "msg": f"委托状态变化文件没找到: {account_id}"}
+
+    # 重新生成SID列表，可能有的委托从状态变化文件中读取失败了
+    new_sid_list = list(reports.keys())
 
     # 取出所有执行报告中的委托数据
-    all_exec_reports = csv_get_exec_report_data(account_id)
+    all_exec_reports = csv_get_exec_report_data_by_sidlist(account_id, new_sid_list)
     if all_exec_reports is None:
-        # 没能拿到详细的执行数据，撤销的委托中的成交数据为0，待下次查询
-        all_exec_reports = []
+        return {"status": 500, "msg": "执行回报文件没找到"}
 
     result_events = {}
-    # 撤销委托的on_order_status数据里面，没有成交信息
+    # 撤销委托的order_status数据里面，没有成交信息，order_status_change里面没有成交价格
     for report in reports.values():
         event = helper_load_trade_event(report)
         # 装载执行回报中的数据
-        helper_get_exec_reports_by_sid(all_exec_reports, event)
+        helper_sum_exec_reports_by_sid(all_exec_reports, event)
         result_events[event.entrust_no] = event.toDict()
 
     return {"status": 200, "msg": "OK", "data": result_events}
@@ -178,8 +169,7 @@ def wrapper_get_today_all_entrusts(account_id: str):
     # 取出所有执行报告中的委托数据
     all_exec_reports = csv_get_exec_report_data(account_id)
     if all_exec_reports is None:
-        # 没能拿到详细的执行数据，如果对应的委托为2或者3，此次查询的结果应该放弃，待下次查询
-        all_exec_reports = []
+        return {"status": 500, "msg": "执行回报文件没找到"}
 
     result_events = {}
     for entrust in all_entrusts:
@@ -191,11 +181,9 @@ def wrapper_get_today_all_entrusts(account_id: str):
             continue
 
         # 装载执行回报中的数据
-        helper_get_exec_reports_by_sid(all_exec_reports, event)
-        if (
-            event.status == OrderStatus.ALL_TRANSACTIONS
-            and event.volume != event.filled
-        ):
+        helper_sum_exec_reports_by_sid(all_exec_reports, event)
+        if ((event.status == OrderStatus.ALL_TRANSACTIONS and event.volume != event.filled) or
+            (event.status == OrderStatus.PARTIAL_TRANSACTION and event.volume < event.filled)):
             # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
             event.filled = 0
             event.avg_price = 0

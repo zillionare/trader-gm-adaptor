@@ -23,10 +23,10 @@ class GMCash:
     frozen: float  # 持仓占用资金（期货）
     available: float  # 可用资金
     balance: float  # 资金余额
-    created_at: datetime.datetime  # 资金初始时间
-    updated_at: datetime.datetime  # 资金变更时间
-    recv_at: datetime.datetime  # 终端接收时间
-    ord_frozen: float  # 冻结资金
+    # created_at: datetime.datetime  # 资金初始时间
+    # updated_at: datetime.datetime  # 资金变更时间
+    # recv_at: datetime.datetime  # 终端接收时间
+    # ord_frozen: float  # 冻结资金
 
     def __init__(self, dict_data):
         self.account_id = dict_data["account_id"]
@@ -37,9 +37,6 @@ class GMCash:
         self.frozen = float(dict_data["frozen"])
         self.available = float(dict_data["available"])
         self.balance = float(dict_data["balance"])
-        # self.created_at = datetime.datetime.strptime(dict_data['created_at'], "%Y-%m-%dT%H:%M:%S+08:00")
-        # self.updated_at = datetime.datetime.strptime(dict_data['updated_at'], "%Y-%m-%dT%H:%M:%S.%f+08:00")
-        # self.recv_at = datetime.datetime.strptime(dict_data['recv_at'], "%Y-%m-%dT%H:%M:%S.%f+08:00")
 
     def toDict(self):
         return {
@@ -57,13 +54,13 @@ class GMPosition:
     symbol: str  # 证券代码(市场.代码)如:SZSE.000001
     side: int  # 持仓方向 参见
     volume: int  # 总持仓量; 昨持仓量(volume-vol_today)
-    vol_today: int  # 今日持仓量
+    # vol_today: int  # 今日持仓量
     vwap: float  # 持仓均价
     # vwap_dild: float    # 摊薄持仓均价
     market_val: float  # 持仓市值
     price: float  # 当前行情价格
     fpnl: float  # 持仓浮动盈亏
-    cost: float  # 持仓成本
+    # cost: float  # 持仓成本
     avl_now: int  # 当前可平仓位(根据标的的T+N属性计算)
     # created_at: int # 建仓时间
     # updated_at: int # 仓位变更时间
@@ -74,12 +71,10 @@ class GMPosition:
         self.symbol = dict_data["symbol"]
         self.side = int(dict_data["side"])
         self.volume = int(dict_data["volume"])
-        self.vol_today = int(dict_data["volume_today(vol_today)"])
         self.vwap = float(dict_data["vwap"])
         self.market_val = float(dict_data["market_value(market_val)"])
         self.price = float(dict_data["price"])
         self.fpnl = float(dict_data["fpnl"])
-        self.cost = float(dict_data["cost"])
         self.avl_now = int(dict_data["available_now(avl_now)"])
 
     def toDict(self):

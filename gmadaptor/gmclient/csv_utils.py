@@ -143,12 +143,25 @@ def csv_get_exec_report_data(account_id: str):
     return reports
 
 
-def csv_get_exec_report_data_by_sid(account_id: str, sid: str):
-    rpt_file = get_gm_out_csv_execreport(account_id)
-    if not path.exists(rpt_file):
-        logger.error("execution report file not found: %s", rpt_file)
+def csv_get_exec_report_data_by_sidlist(account_id: str, sid_list: list):
+    exec_rpt_file = get_gm_out_csv_execreport(account_id)
+    if not path.exists(exec_rpt_file):
+        logger.error("execution report file not found: %s", exec_rpt_file)
         return None
 
+    reports = []
+    with open(exec_rpt_file, "r", encoding="utf-8-sig") as csvfile:
+        for row in csv.DictReader(csvfile):
+            report = GMExecReport(row)
+            if report.sid in sid_list:
+                reports.append(report)
+
+    logger.debug("total reports read in exec report file: %d", len(reports))
+    return reports
+
+
+# 读取执行回报中的数据，根据目前观察到的结果，此文件只有15状态的数据
+def csv_get_exec_report_data_by_sid(rpt_file: str, sid: str):
     reports = []
     with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
@@ -165,15 +178,11 @@ def csv_get_exec_report_data_by_sid(account_id: str, sid: str):
     if len(reports) == 0:  # not found
         return {"result": -1}
 
+    # 至少收集到了一条数据
     return {"result": 0, "reports": reports}
 
 
-def csv_get_order_status_change_data_by_sid(account_id: str, sid: str):
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    if not path.exists(status_file):
-        logger.error("order status change file not found: %s", status_file)
-        return None
-
+def csv_get_order_status_change_data_by_sid(status_file: str, sid: str):
     result_report = None
     with open(status_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
@@ -195,12 +204,7 @@ def csv_get_order_status_change_data_by_sid(account_id: str, sid: str):
         return {"result": 1, "report": result_report}
 
 
-def csv_get_order_status_change_data_by_sidlist(account_id: str, sidlist: list):
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    if not path.exists(status_file):
-        logger.error("order status change file not found: %s", status_file)
-        return None
-
+def csv_get_order_status_change_data_by_sidlist(status_file: str, sidlist: list):
     result_reports = {}
     with open(status_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):

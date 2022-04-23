@@ -1,4 +1,5 @@
 from asyncio.log import logger
+from os import path
 from time import sleep
 
 import cfg4py
@@ -21,6 +22,7 @@ from gmadaptor.gmclient.csv_utils import (
 )
 from gmadaptor.gmclient.csvdata import GMCash, GMExecReport, GMOrderReport, GMPosition
 from gmadaptor.gmclient.types import GMOrderBiz, GMOrderType
+from gmadaptor.gmclient.wrapper import get_gm_out_csv_execreport, get_gm_out_csv_order_status_change
 
 
 def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
@@ -63,7 +65,8 @@ def helper_calculate_trade_fees(amount, fees_info, order_side):
     return comission + transfer_fee + stamp_duty
 
 
-def helper_get_exec_reports_by_sid(exec_reports, event):
+# 更新读取到的委托交易信息（执行回报文件中的数据）
+def helper_sum_exec_reports_by_sid(exec_reports, event):
     server_config = cfg4py.get_instance()
     trade_fees = server_config.gm_info.trade_fees
 
@@ -95,6 +98,7 @@ def helper_get_exec_reports_by_sid(exec_reports, event):
         event.recv_at = recv_at
 
 
+# 循环读取执行回报之前，清除掉交易信息
 def helper_reset_event(event):
     event.avg_price = 0
     event.filled = 0
@@ -105,7 +109,6 @@ def helper_reset_event(event):
 def helper_set_gm_order_side(order_side):
     if order_side == OrderSide.SELL:
         return GMOrderBiz.SELL
-
     else:
         return GMOrderBiz.BUY
 
@@ -117,78 +120,81 @@ def helper_set_gm_order_type(order_type):
     return GMOrderType.LIMITPRICE
 
 
+# 从status change file中读取订单状态变化数据
 def helper_get_order_from_status_change_file(account_id, sid, params):
-    timeout_in_action = params["timeout"]
+    timeout_in_action = params["timeout"]  # 毫秒
 
-    report = None
+    status_file = get_gm_out_csv_order_status_change(account_id)
+    if not path.exists(status_file):
+        logger.error("order status change file not found: %s", status_file)
+        return None    
+
+    report = []  # 定义成空值，避免和None冲突
     while timeout_in_action > 0:
-        result = csv_get_order_status_change_data_by_sid(account_id, sid)
-        if result is None:
-            logger.warning(
-                "order status change file not found of this account: %s", account_id
-            )
-            return None
-
+        result = csv_get_order_status_change_data_by_sid(status_file, sid)
         result_status = result["result"]
-        if result_status != -1:  # 保存查询到的结果，继续查看
+        if result_status != -1:  # 保存查询到的结果，继续查看，-1代表未查询到结果
             report = result["report"]
-        if result_status == 0:  # 获取完结状态的信息
+
+        if result_status == 0:  # 完结状态直接退出循环
             break
 
-        sleep(100 / 1000)
+        sleep(200 / 1000)
         timeout_in_action -= 200
-        params["timeout"] = timeout_in_action
+        params["timeout"] = timeout_in_action  # 保存剩下的超时计数
 
-    return report
+    return [report]
 
 
+# 从执行回报文件中读取状态的详细信息
 def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action):
-    exec_reports = None
+    rpt_file = get_gm_out_csv_execreport(account_id)
+    if not path.exists(rpt_file):
+        logger.error("execution report file not found: %s", rpt_file)
+        return None
 
+    exec_reports = []  # 定义成空值，避免和None冲突
     while timeout_in_action > 0:
-        helper_reset_event(event)
-        result = csv_get_exec_report_data_by_sid(account_id, sid)
-        if result is None:
-            logger.warning("exec report file not found of this account: %s", account_id)
-            return None
-
+        helper_reset_event(event)  # 每次循环前，清除交易信息
+        result = csv_get_exec_report_data_by_sid(rpt_file, sid)
         status = result["result"]
         if status != -1:  # save result, then retry
             exec_reports = result["reports"]
 
         if status == 0:  # 收集到了至少一条数据
-            helper_get_exec_reports_by_sid(exec_reports, event)
+            helper_sum_exec_reports_by_sid(exec_reports, event)
             if event.status == OrderStatus.ALL_TRANSACTIONS:
+                 # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
                 if event.volume != event.filled:
-                    # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
+                    logger.error("全成的委托，读取的数据不完整: %s -> %s", account_id, sid)
                     helper_reset_event(event)
                 else:
                     break  # 结束循环
 
             if event.status == OrderStatus.PARTIAL_TRANSACTION:
                 if event.volume < event.filled:
-                    logger.error("order volume is less than filled volume")
+                    logger.error("部成的委托，成交量大于委托量，不正确：%s -> %s", account_id, sid)
                     helper_reset_event(event)
                     break
 
-        sleep(100 / 1000)
+        sleep(200 / 1000)
         timeout_in_action -= 200
 
     return exec_reports
 
 
 def helper_get_orders_from_status_change_by_sidlist(account_id, sid_list):
-    reports = {}
+    status_file = get_gm_out_csv_order_status_change(account_id)
+    if not path.exists(status_file):
+        logger.error("order status change file not found: %s", status_file)
+        return None
 
     # 默认等待2000毫秒
     timeout_in_action = 2000
-    while timeout_in_action > 0:
-        result = csv_get_order_status_change_data_by_sidlist(account_id, sid_list)
-        if result is None:
-            logger.warning(
-                "order status change file not found of this account: %s", account_id
-            )
 
+    reports = {}  # 定义成空值，避免和None冲突
+    while timeout_in_action > 0:
+        result = csv_get_order_status_change_data_by_sidlist(status_file, sid_list)
         result_status = result["result"]
         if result_status != -1:  # 保存查询到的结果
             reports = result["reports"]
@@ -196,7 +202,7 @@ def helper_get_orders_from_status_change_by_sidlist(account_id, sid_list):
         if result_status == 0:  # 获取完结状态的信息
             break
 
-        sleep(100 / 1000)
+        sleep(200 / 1000)
         timeout_in_action -= 200
 
     return reports

@@ -84,19 +84,14 @@ async def bp_mock_buy(request):
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.BUY,
-        OrderType.LIMIT,
-        0,
+        symbol, volume, price,
+        OrderSide.BUY, OrderType.LIMIT, 0,
         timeout_in_ms,
     )
     if result["status"] != 200:
         logger.info(f"buy result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
 
-    # we can check result.status if this entrust success
     data = result["data"]
     logger.info(f"buy result: \n{data}")
     return response.json(make_response(0, "OK", data))
@@ -106,32 +101,30 @@ async def bp_mock_buy(request):
 async def bp_mock_market_buy(request):
     # 掘金文件单支持多种市价成交方式
     account_id = request.headers.get("Account-ID")
-
     symbol = request.json.get("security")
-    price = request.json.get("price")
+    volume = request.json.get("volume")
+    if symbol is None or volume is None:
+        logger.info("parameter is empty: %s", account_id)
+        return response.json(make_response(-1, "parameter cannot be empty"))
 
     # 市价交易暂时不用价格，及限价参数
+    price = request.json.get("price")
     if price is None:  # 尽量不用None传递参数
         price = 0
     limit_price = request.json.get("limit_price")
     if limit_price is None:  # 尽量不用None传递参数
         limit_price = 0
-
-    volume = request.json.get("volume")
     timeout = request.json.get("timeout")
     timeout_in_ms = calculate_timeout_in_ms(timeout, 2, 5)
+
     logger.info(
         f"market_buy: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
     )
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.BUY,
-        OrderType.MARKET,
-        limit_price,
+        symbol, volume, price,
+        OrderSide.BUY, OrderType.MARKET, limit_price,
         timeout_in_ms,
     )
     if result["status"] != 200:
@@ -150,6 +143,10 @@ async def bp_mock_sell(request):
     symbol = request.json.get("security")
     price = request.json.get("price")
     volume = request.json.get("volume")
+    if symbol is None or price is None or volume is None:
+        logger.info("parameter is empty: %s", account_id)
+        return response.json(make_response(-1, "parameter cannot be empty"))
+
     timeout = request.json.get("timeout")
     timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
     logger.info(
@@ -158,12 +155,8 @@ async def bp_mock_sell(request):
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.SELL,
-        OrderType.LIMIT,
-        0,
+        symbol, volume, price,
+        OrderSide.SELL, OrderType.LIMIT, 0,
         timeout_in_ms,
     )
     if result["status"] != 200:
@@ -181,6 +174,9 @@ async def bp_mock_market_sell(request):
     account_id = request.headers.get("Account-ID")
     symbol = request.json.get("security")
     volume = request.json.get("volume")
+    if symbol is None or volume is None:
+        logger.info("parameter is empty: %s", account_id)
+        return response.json(make_response(-1, "parameter cannot be empty"))
 
     price = request.json.get("price")
     if price is None:
@@ -188,21 +184,17 @@ async def bp_mock_market_sell(request):
     limit_price = request.json.get("limit_price")
     if limit_price is None:  # 尽量不用None传递参数
         limit_price = 0
-
     timeout = request.json.get("timeout")
     timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+
     logger.info(
         f"market_sell: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
     )
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.SELL,
-        OrderType.MARKET,
-        limit_price,
+        symbol, volume, price,
+        OrderSide.SELL, OrderType.MARKET, limit_price,
         timeout_in_ms,
     )
     if result["status"] != 200:
@@ -235,7 +227,7 @@ async def bp_mock_cancel_entrust(request):
     datalist = result["data"]
     if len(datalist) == 0:
         logger.info("cancel_entrusts result: no results found")
-        return response.json(make_response(0, "OK"))
+        return response.json(make_response(1, "no results found"))
     else:
         values = list(datalist.values())
         item = values[0]
@@ -265,10 +257,11 @@ async def bp_mock_cancel_entrusts(request):
     datalist = result["data"]
     if len(datalist) == 0:
         logger.info("cancel_entrusts result: no results found")
+        return response.json(make_response(1, "no results found"))
     else:
         for item in datalist.keys():
             logger.info(f"cancel_entrusts result: {item}\n{datalist[item]}")
-    return response.json(make_response(0, "OK", datalist))
+        return response.json(make_response(0, "OK", datalist))
 
 
 @bp_gm_adaptor.route("/today_entrusts", methods=["POST"])
