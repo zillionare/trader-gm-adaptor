@@ -113,7 +113,7 @@ def wrapper_trade_operation(
 
     # 2和3的委托，再读取成交记录
     exec_reports = helper_get_data_from_exec_reports(
-        account_id, sid, event, timeout_in_action
+        account_id, sid, event, timeout_in_action, report.filled_vol
     )
     if exec_reports is None:
         return {"status": 500, "msg": "执行回报文件没找到"}

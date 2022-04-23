@@ -48,21 +48,21 @@ def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
 
 def helper_calculate_trade_fees(amount, fees_info, order_side):
     """交易费用计算
-    comission: 0.03  # 券商佣金，万分之三
+    commission: 0.03  # 券商佣金，万分之三
     stamp_duty: 0.1 # 印花税，千分之一
     transfer_fee: 0.002 # 过户费，万分之0.2
     minimum_cost: 5.0 # 最低佣金
     """
-    comission = amount * (fees_info.comission / 10000)
-    if comission < fees_info.minimum_cost:
-        comission = fees_info.minimum_cost
-    transfer_fee = amount * (fees_info.transfer_fee / 10000)
+    commission = amount * fees_info.commission / 10000
+    if commission < fees_info.minimum_cost:
+        commission = fees_info.minimum_cost
+    transfer_fee = amount * fees_info.transfer_fee / 10000
 
     stamp_duty = 0
     if order_side == 2:
-        stamp_duty = amount * (fees_info.stamp_duty / 10000)
+        stamp_duty = amount * fees_info.stamp_duty / 10000
 
-    return comission + transfer_fee + stamp_duty
+    return commission + transfer_fee + stamp_duty
 
 
 # 更新读取到的委托交易信息（执行回报文件中的数据）
