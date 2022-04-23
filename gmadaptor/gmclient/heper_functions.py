@@ -122,19 +122,18 @@ def helper_set_gm_order_type(order_type):
 
 # 从status change file中读取订单状态变化数据
 def helper_get_order_from_status_change_file(account_id, sid, params):
-    timeout_in_action = params["timeout"]  # 毫秒
-
     status_file = get_gm_out_csv_order_status_change(account_id)
     if not path.exists(status_file):
         logger.error("order status change file not found: %s", status_file)
-        return None    
-
-    report = []  # 定义成空值，避免和None冲突
+        return None
+    
+    reports = []  # 定义成空值，避免和None冲突
+    timeout_in_action = params["timeout"]  # 毫秒    
     while timeout_in_action > 0:
         result = csv_get_order_status_change_data_by_sid(status_file, sid)
         result_status = result["result"]
         if result_status != -1:  # 保存查询到的结果，继续查看，-1代表未查询到结果
-            report = result["report"]
+            reports.append(result["report"])
 
         if result_status == 0:  # 完结状态直接退出循环
             break
@@ -143,7 +142,7 @@ def helper_get_order_from_status_change_file(account_id, sid, params):
         timeout_in_action -= 200
         params["timeout"] = timeout_in_action  # 保存剩下的超时计数
 
-    return [report]
+    return reports
 
 
 # 从执行回报文件中读取状态的详细信息

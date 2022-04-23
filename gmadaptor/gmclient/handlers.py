@@ -113,7 +113,7 @@ def wrapper_trade_operation(
 
     # 2和3的委托，再读取成交记录
     exec_reports = helper_get_data_from_exec_reports(
-        account_id, sid, event, timeout_in_action, report.filled_vol
+        account_id, sid, event, timeout_in_action
     )
     if exec_reports is None:
         return {"status": 500, "msg": "执行回报文件没找到"}
@@ -140,6 +140,8 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
     reports = helper_get_orders_from_status_change_by_sidlist(account_id, sid_list)
     if reports is None:
         return {"status": 500, "msg": f"委托状态变化文件没找到: {account_id}"}
+    if len(reports) == 0:
+        return {"status": 500, "msg": "failed to get result of these entrusts"}
 
     # 重新生成SID列表，可能有的委托从状态变化文件中读取失败了
     new_sid_list = list(reports.keys())
