@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
-from logging.handlers import TimedRotatingFileHandler
 import os
+from logging.handlers import TimedRotatingFileHandler
 from os import path, sys
 
 import cfg4py
@@ -34,6 +34,7 @@ def init_config():
 
     return 0
 
+
 def init_log_path(log_dir):
     if os.path.exists(log_dir):
         return 0
@@ -51,7 +52,9 @@ def init_logger(filename: str, loglevel: int):
     LOG_FORMAT = r"%(asctime)s %(levelname)s %(filename)s[line:%(lineno)d] %(message)s"
     DATE_FORMAT = r"%Y-%m-%d  %H:%M:%S %a"
 
-    fh = TimedRotatingFileHandler(filename, when="D", interval=1, backupCount=7, encoding="utf-8")
+    fh = TimedRotatingFileHandler(
+        filename, when="D", interval=1, backupCount=7, encoding="utf-8"
+    )
     fh.setLevel(loglevel)
     formatter = logging.Formatter(fmt=LOG_FORMAT, datefmt=DATE_FORMAT)
     fh.setFormatter(formatter)
@@ -61,7 +64,10 @@ def init_logger(filename: str, loglevel: int):
     console.setFormatter(formatter)
 
     logging.basicConfig(
-        level=logging.DEBUG, format=LOG_FORMAT, datefmt=DATE_FORMAT, handlers=[console, fh]
+        level=loglevel,
+        format=LOG_FORMAT,
+        datefmt=DATE_FORMAT,
+        handlers=[console, fh],
     )
 
 
@@ -80,7 +86,10 @@ def start():
     init_logger(logfile, loglevel)
 
     logger.info("launch gm client wrapper ...")
-    gm_client_wrapper_start()
+    rc = gm_client_wrapper_start()
+    if rc != 0:
+        logger.error("failed to launch gm client wrapper")
+        os._exit(1)
 
     logger.info("launch http server ...")
     server_info = server_config.server_info

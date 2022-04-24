@@ -6,36 +6,26 @@ import logging
 from time import sleep
 
 from cfg4py.config import Config
-from gmadaptor.common.name_conversion import (
-    stockcode_to_myquant,
-)
-from gmadaptor.common.types import (
-    OrderSide,
-    OrderStatus,
-    OrderType,
-)
+from gmadaptor.common.name_conversion import stockcode_to_myquant
+from gmadaptor.common.types import OrderSide, OrderStatus, OrderType
 from gmadaptor.gmclient.csv_utils import (
     csv_generate_cancel_order,
     csv_generate_order,
     csv_get_exec_report_data,
-    csv_get_exec_report_data_by_sidlist,
     csv_get_order_status,
     csv_get_unfinished_entrusts_from_order_status,
 )
-from gmadaptor.gmclient.csvdata import GMCash, GMExecReport, GMOrderReport, GMPosition
+from gmadaptor.gmclient.csvdata import GMCash, GMPosition
 from gmadaptor.gmclient.heper_functions import (
     helper_get_data_from_exec_reports,
-    helper_sum_exec_reports_by_sid,
-    helper_get_order_from_status_change_file,
-    helper_get_orders_from_status_change_by_sidlist,
+    helper_get_order_status_change_by_sidlist,
+    helper_get_order_status_change_data,
     helper_load_trade_event,
     helper_set_gm_order_side,
     helper_set_gm_order_type,
+    helper_sum_exec_reports_by_sid,
 )
-from gmadaptor.gmclient.wrapper import (
-    get_gm_out_csv_cash,
-    get_gm_out_csv_position,
-)
+from gmadaptor.gmclient.wrapper import get_gm_out_csv_cash, get_gm_out_csv_position
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +67,12 @@ def wrapper_get_positions(account_id: str):
 
 def wrapper_trade_operation(
     account_id: str,
-    security: str, volume: int, price: float,
-    order_side: OrderSide, order_type: OrderType, limit_price: float = None,
+    security: str,
+    volume: int,
+    price: float,
+    order_side: OrderSide,
+    order_type: OrderType,
+    limit_price: float = None,
     timeout_in_action: float = 1000,  # 毫秒
 ):
     myquant_code = stockcode_to_myquant(security)
@@ -88,13 +82,13 @@ def wrapper_trade_operation(
     sid = csv_generate_order(
         account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
-    # sid = "faf98b08-a67e-11ec-a4d3-a5d7002ce96d"
+    # sid = "69724e8e-a680-11ec-a4d3-a5d7002ce96d"
     if sid is None:
-        return {"status": 401, "msg": "failed to append data to input file"}    
+        return {"status": 401, "msg": "failed to append data to input file"}
 
     params = {"timeout": timeout_in_action}
     # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
-    reports = helper_get_order_from_status_change_file(account_id, sid, params)
+    reports = helper_get_order_status_change_data(account_id, sid, params)
     if reports is None:
         return {"status": 500, "msg": "委托状态变化文件没找到"}
     if len(reports) == 0:
@@ -137,7 +131,7 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
         }
 
     # 从状态更新文件中读取撤销结果，{}字典
-    reports = helper_get_orders_from_status_change_by_sidlist(account_id, sid_list)
+    reports = helper_get_order_status_change_by_sidlist(account_id, sid_list)
     if reports is None:
         return {"status": 500, "msg": f"委托状态变化文件没找到: {account_id}"}
     if len(reports) == 0:
@@ -147,7 +141,7 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
     new_sid_list = list(reports.keys())
 
     # 取出所有执行报告中的委托数据
-    all_exec_reports = csv_get_exec_report_data_by_sidlist(account_id, new_sid_list)
+    all_exec_reports = csv_get_exec_report_data(account_id, new_sid_list)
     if all_exec_reports is None:
         return {"status": 500, "msg": "执行回报文件没找到"}
 
@@ -169,7 +163,7 @@ def wrapper_get_today_all_entrusts(account_id: str):
         return {"status": 500, "msg": "order status file not found of this account"}
 
     # 取出所有执行报告中的委托数据
-    all_exec_reports = csv_get_exec_report_data(account_id)
+    all_exec_reports = csv_get_exec_report_data(account_id, None)
     if all_exec_reports is None:
         return {"status": 500, "msg": "执行回报文件没找到"}
 
@@ -184,8 +178,13 @@ def wrapper_get_today_all_entrusts(account_id: str):
 
         # 装载执行回报中的数据
         helper_sum_exec_reports_by_sid(all_exec_reports, event)
-        if ((event.status == OrderStatus.ALL_TRANSACTIONS and event.volume != event.filled) or
-            (event.status == OrderStatus.PARTIAL_TRANSACTION and event.volume < event.filled)):
+        if (
+            event.status == OrderStatus.ALL_TRANSACTIONS
+            and event.volume != event.filled
+        ) or (
+            event.status == OrderStatus.PARTIAL_TRANSACTION
+            and event.volume < event.filled
+        ):
             # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
             event.filled = 0
             event.avg_price = 0
@@ -212,7 +211,7 @@ def wrapper_get_unfinished_entursts(account_id: str):
 
 def wrapper_get_today_trades(account_id: str):
     # 取出所有的执行报告，均为交易成功的委托，买或者卖
-    reports = csv_get_exec_report_data(account_id)
+    reports = csv_get_exec_report_data(account_id, None)
     if reports is None:
         return {"status": 500, "msg": "execution report file not found of this account"}
 

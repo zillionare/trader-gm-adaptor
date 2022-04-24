@@ -84,8 +84,12 @@ async def bp_mock_buy(request):
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol, volume, price,
-        OrderSide.BUY, OrderType.LIMIT, 0,
+        symbol,
+        volume,
+        price,
+        OrderSide.BUY,
+        OrderType.LIMIT,
+        0,
         timeout_in_ms,
     )
     if result["status"] != 200:
@@ -123,8 +127,12 @@ async def bp_mock_market_buy(request):
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol, volume, price,
-        OrderSide.BUY, OrderType.MARKET, limit_price,
+        symbol,
+        volume,
+        price,
+        OrderSide.BUY,
+        OrderType.MARKET,
+        limit_price,
         timeout_in_ms,
     )
     if result["status"] != 200:
@@ -155,8 +163,12 @@ async def bp_mock_sell(request):
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol, volume, price,
-        OrderSide.SELL, OrderType.LIMIT, 0,
+        symbol,
+        volume,
+        price,
+        OrderSide.SELL,
+        OrderType.LIMIT,
+        0,
         timeout_in_ms,
     )
     if result["status"] != 200:
@@ -193,8 +205,12 @@ async def bp_mock_market_sell(request):
 
     result = handler.wrapper_trade_operation(
         account_id,
-        symbol, volume, price,
-        OrderSide.SELL, OrderType.MARKET, limit_price,
+        symbol,
+        volume,
+        price,
+        OrderSide.SELL,
+        OrderType.MARKET,
+        limit_price,
         timeout_in_ms,
     )
     if result["status"] != 200:

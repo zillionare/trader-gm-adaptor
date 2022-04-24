@@ -3,7 +3,6 @@ from functools import wraps
 from typing import Dict, List, Union
 
 import cfg4py
-from cfg4py.config import Config
 
 
 def check_request_token(access_token):
@@ -42,10 +41,11 @@ def calculate_timeout_in_ms(
     """
 
     if timeout is None:
-        timeout_in_ms = default_val * 1000
-    elif timeout < min_val:
-        timeout_in_ms = min_val * 1000
-    else:
-        timeout_in_ms = timeout * 1000
+        return default_val * 1000
 
-    return timeout_in_ms
+    if timeout < min_val:
+        return min_val * 1000
+    if timeout > 60:
+        return 60 * 1000
+
+    return timeout * 1000

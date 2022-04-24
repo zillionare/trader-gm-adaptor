@@ -4,12 +4,10 @@
 import csv
 import datetime
 import logging
-import os
 import uuid
 from os import path
 from threading import Lock
 
-from gmadaptor.common.types import OrderSide, OrderType
 from gmadaptor.gmclient.csvdata import GMExecReport, GMOrderReport
 from gmadaptor.gmclient.types import GMOrderBiz, GMOrderType
 from gmadaptor.gmclient.wrapper import (
@@ -17,7 +15,6 @@ from gmadaptor.gmclient.wrapper import (
     get_gm_in_csv_cancelorder,
     get_gm_in_csv_order,
     get_gm_out_csv_execreport,
-    get_gm_out_csv_order_status_change,
     get_gm_out_csv_orderstatus,
 )
 
@@ -123,8 +120,8 @@ def csv_generate_cancel_order(account_id: str, sid_list: list):
 
 # ------------------  generate order or cancel order ------ end ----------------
 
-
-def csv_get_exec_report_data(account_id: str):
+# 从执行回报中获取数据，如果sid_list非空，则过滤结果
+def csv_get_exec_report_data(account_id: str, sid_list: list):
     exec_rpt_file = get_gm_out_csv_execreport(account_id)
     if not path.exists(exec_rpt_file):
         logger.error("execution report file not found: %s", exec_rpt_file)
@@ -134,26 +131,9 @@ def csv_get_exec_report_data(account_id: str):
     with open(exec_rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = GMExecReport(row)
-            logger.debug(
-                f"exec report: {report.sid}, {report.symbol}, {report.price}, {report.volume}"
-            )
-            reports.append(report)
-
-    logger.debug("total reports read in exec report file: %d", len(reports))
-    return reports
-
-
-def csv_get_exec_report_data_by_sidlist(account_id: str, sid_list: list):
-    exec_rpt_file = get_gm_out_csv_execreport(account_id)
-    if not path.exists(exec_rpt_file):
-        logger.error("execution report file not found: %s", exec_rpt_file)
-        return None
-
-    reports = []
-    with open(exec_rpt_file, "r", encoding="utf-8-sig") as csvfile:
-        for row in csv.DictReader(csvfile):
-            report = GMExecReport(row)
-            if report.sid in sid_list:
+            if sid_list is None:
+                reports.append(report)
+            elif report.sid in sid_list:
                 reports.append(report)
 
     logger.debug("total reports read in exec report file: %d", len(reports))
@@ -174,12 +154,7 @@ def csv_get_exec_report_data_by_sid(rpt_file: str, sid: str):
                 else:
                     reports.append(report)
 
-    # retry next time until timeout
-    if len(reports) == 0:  # not found
-        return {"result": -1}
-
-    # 至少收集到了一条数据
-    return {"result": 0, "reports": reports}
+    return reports
 
 
 def csv_get_order_status_change_data_by_sid(status_file: str, sid: str):
