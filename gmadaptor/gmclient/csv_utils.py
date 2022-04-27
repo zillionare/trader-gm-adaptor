@@ -131,6 +131,9 @@ def csv_get_exec_report_data(account_id: str, sid_list: list):
     with open(exec_rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = GMExecReport(row)
+            if report.exec_type != 15:  # 15成交，19执行有异常
+                continue
+            # 跳过异常数据后，只保留有效数据
             if sid_list is None:
                 reports.append(report)
             elif report.sid in sid_list:
@@ -146,13 +149,11 @@ def csv_get_exec_report_data_by_sid(rpt_file: str, sid: str):
     with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = GMExecReport(row)
+            if report.exec_type != 15:  # ExecType_Trade = 15 # 成交(有效)
+                continue
+            # 跳过异常数据后，只保留有效数据
             if sid == report.sid:
-                if report.exec_type != 15:  # ExecType_Trade = 15 # 成交(有效)
-                    logger.warning(
-                        f"exec report(!15): {report.sid}, {report.symbol}, {report.price}, {report.volume}, {report.exec_type}"
-                    )
-                else:
-                    reports.append(report)
+                reports.append(report)
 
     return reports
 
