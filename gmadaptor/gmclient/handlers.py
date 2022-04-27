@@ -150,7 +150,9 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
     for report in reports.values():
         event = helper_load_trade_event(report)
         # 装载执行回报中的数据
-        helper_sum_exec_reports_by_sid(all_exec_reports, event)
+        if len(all_exec_reports) > 0:
+            helper_sum_exec_reports_by_sid(all_exec_reports, event)
+
         result_events[event.entrust_no] = event.toDict()
 
     return {"status": 200, "msg": "OK", "data": result_events}
@@ -177,18 +179,9 @@ def wrapper_get_today_all_entrusts(account_id: str):
             continue
 
         # 装载执行回报中的数据
-        helper_sum_exec_reports_by_sid(all_exec_reports, event)
-        if (
-            event.status == OrderStatus.ALL_TRANSACTIONS
-            and event.volume != event.filled
-        ) or (
-            event.status == OrderStatus.PARTIAL_TRANSACTION
-            and event.volume < event.filled
-        ):
-            # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
-            event.filled = 0
-            event.avg_price = 0
-            event.trade_fees = 0
+        if len(all_exec_reports) > 0:
+            helper_sum_exec_reports_by_sid(all_exec_reports, event)
+
         result_events[event.entrust_no] = event.toDict()
 
     return {"status": 200, "msg": "success", "data": result_events}

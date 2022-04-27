@@ -68,11 +68,8 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     total_commission = 0  # 总手续费
     recv_at = None  # 最后完成交易的时间
 
-    my_exec_rpts = []
     for exec_rpt in exec_reports:  # 从执行回报中取详细数据
         if exec_rpt.sid == event.entrust_no:
-            my_exec_rpts.append(exec_rpt)
-
             total_volume += exec_rpt.volume
             total_amount += exec_rpt.volume * exec_rpt.price
             total_commission += helper_calculate_trade_fees(
@@ -89,6 +86,25 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     event.trade_fees = total_commission
     if recv_at is not None:
         event.recv_at = recv_at
+
+    if event.status == OrderStatus.ALL_TRANSACTIONS:
+        # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
+        if event.volume != event.filled:
+            logger.warning("全成的委托，读取的数据不完整: %s -> %s", event.entrust_no, event.code)
+            helper_reset_event(event)
+            return False  # 数据不完整，可以继续尝试几次
+        else:
+            return True  # 结束循环
+
+    if event.status == OrderStatus.PARTIAL_TRANSACTION or event.status == OrderStatus.CANCEL_ALL_ORDERS:
+        if event.volume < event.filled:
+            logger.error("部成和已撤的委托，成交量大于委托量，不正确：%s -> %s", event.entrust_no, event.code)
+            helper_reset_event(event)
+            return True  # 已经错误，不再继续执行
+        else:
+            return False  # 数据可能不完整，可以继续尝试几次
+    
+    return True  # 其他情况不继续处理了
 
 
 # 循环读取执行回报之前，清除掉交易信息
@@ -165,7 +181,7 @@ def helper_get_order_status_change_by_sidlist(account_id, sid_list):
     return reports
 
 
-# 从执行回报文件中读取状态的详细信息
+# 从执行回报文件中读取状态的详细信息，调用者：wrapper_trade_operation
 def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action):
     rpt_file = get_gm_out_csv_execreport(account_id)
     if not path.exists(rpt_file):
@@ -177,21 +193,8 @@ def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action)
         helper_reset_event(event)  # 每次循环前，清除交易信息
         exec_reports = csv_get_exec_report_data_by_sid(rpt_file, sid)
         if len(exec_reports) > 0:  # 收集到了至少一条数据
-            helper_sum_exec_reports_by_sid(exec_reports, event)
-
-            if event.status == OrderStatus.ALL_TRANSACTIONS:
-                # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
-                if event.volume != event.filled:
-                    logger.error("全成的委托，读取的数据不完整: %s -> %s", account_id, sid)
-                    helper_reset_event(event)
-                else:
-                    break  # 结束循环
-
-            if event.status == OrderStatus.PARTIAL_TRANSACTION:
-                if event.volume < event.filled:
-                    logger.error("部成的委托，成交量大于委托量，不正确：%s -> %s", account_id, sid)
-                    helper_reset_event(event)
-                    break
+            if helper_sum_exec_reports_by_sid(exec_reports, event):
+                break
 
         sleep(200 / 1000)
         timeout_in_action -= 200
