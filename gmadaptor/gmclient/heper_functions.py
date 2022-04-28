@@ -18,6 +18,17 @@ from gmadaptor.gmclient.wrapper import (
 )
 
 
+def math_round(x: float, digits: int):
+    """由于浮点数的表示问题，很多语言的round函数与数学上的round函数不一致。下面的函数结果与数学上的一致。
+
+    Args:
+        x: 要进行四舍五入的数字
+        digits: 小数点后保留的位数
+
+    """
+    return int(x * (10**digits) + 0.5) / (10**digits)
+
+
 def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
     event = TradeEvent(
         stockcode_to_joinquant(order_status_record.symbol),
@@ -39,29 +50,37 @@ def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
     return event
 
 
-def helper_calculate_trade_fees(amount, fees_info, order_side):
+def helper_calculate_trade_fees(amount, fees_info, order_side, is_fake):
     """交易费用计算
     commission: 0.03  # 券商佣金，万分之三
     stamp_duty: 0.1 # 印花税，千分之一
     transfer_fee: 0.002 # 过户费，万分之0.2
     minimum_cost: 5.0 # 最低佣金
+    掘金客户端无印花税选项，因此，不能分开计算，佣金合并印花税
     """
     commission = amount * fees_info.commission / 10000
-    if commission < fees_info.minimum_cost:
-        commission = fees_info.minimum_cost
     transfer_fee = amount * fees_info.transfer_fee / 10000
 
     stamp_duty = 0
     if order_side == 2:
         stamp_duty = amount * fees_info.stamp_duty / 10000
 
-    return commission + transfer_fee + stamp_duty
+    if is_fake:  # 模拟盘无过户费，佣金和印花税合并计算
+        commission += stamp_duty
+        if commission < fees_info.minimum_cost:
+            commission = fees_info.minimum_cost
+        return math_round(commission, 2)
+    else:
+        if commission < fees_info.minimum_cost:
+            commission = fees_info.minimum_cost
+        return math_round(commission + transfer_fee + stamp_duty, 2)
 
 
 # 更新读取到的委托交易信息（执行回报文件中的数据）
 def helper_sum_exec_reports_by_sid(exec_reports, event):
     server_config = cfg4py.get_instance()
     trade_fees = server_config.gm_info.trade_fees
+    is_fake = server_config.gm_info.fake
 
     total_volume = 0
     total_amount = 0.0  # 总资金量
@@ -73,7 +92,10 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
             total_volume += exec_rpt.volume
             total_amount += exec_rpt.volume * exec_rpt.price
             total_commission += helper_calculate_trade_fees(
-                total_amount, trade_fees, exec_rpt.order_side
+                exec_rpt.volume * exec_rpt.price,
+                trade_fees,
+                exec_rpt.order_side,
+                is_fake,
             )
             recv_at = exec_rpt.recv_at
 
@@ -96,14 +118,17 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
         else:
             return True  # 结束循环
 
-    if event.status == OrderStatus.PARTIAL_TRANSACTION or event.status == OrderStatus.CANCEL_ALL_ORDERS:
+    if (
+        event.status == OrderStatus.PARTIAL_TRANSACTION
+        or event.status == OrderStatus.CANCEL_ALL_ORDERS
+    ):
         if event.volume < event.filled:
             logger.error("部成和已撤的委托，成交量大于委托量，不正确：%s -> %s", event.entrust_no, event.code)
             helper_reset_event(event)
             return True  # 已经错误，不再继续执行
         else:
             return False  # 数据可能不完整，可以继续尝试几次
-    
+
     return True  # 其他情况不继续处理了
 
 

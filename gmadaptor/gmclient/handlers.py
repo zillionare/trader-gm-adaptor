@@ -82,7 +82,7 @@ def wrapper_trade_operation(
     sid = csv_generate_order(
         account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
-    # sid = "69724e8e-a680-11ec-a4d3-a5d7002ce96d"
+    # sid = "7093e066-fef3-4b89-90ec-2e405463b929"
     if sid is None:
         return {"status": 401, "msg": "failed to append data to input file"}
 
