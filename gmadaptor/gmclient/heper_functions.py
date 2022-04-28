@@ -58,12 +58,12 @@ def helper_calculate_trade_fees(amount, fees_info, order_side, is_fake):
     minimum_cost: 5.0 # 最低佣金
     掘金客户端无印花税选项，因此，不能分开计算，佣金合并印花税
     """
-    commission = amount * fees_info.commission / 10000
-    transfer_fee = amount * fees_info.transfer_fee / 10000
+    commission = math_round(amount * fees_info.commission / 10000, 2)
+    transfer_fee = math_round(amount * fees_info.transfer_fee / 10000, 2)
 
     stamp_duty = 0
     if order_side == 2:
-        stamp_duty = amount * fees_info.stamp_duty / 10000
+        stamp_duty = math_round(amount * fees_info.stamp_duty / 10000, 2)
 
     if is_fake:  # 模拟盘无过户费，佣金和印花税合并计算
         commission += stamp_duty
@@ -90,9 +90,10 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     for exec_rpt in exec_reports:  # 从执行回报中取详细数据
         if exec_rpt.sid == event.entrust_no:
             total_volume += exec_rpt.volume
-            total_amount += exec_rpt.volume * exec_rpt.price
+            amount = math_round(exec_rpt.volume * exec_rpt.price, 2)
+            total_amount += amount
             total_commission += helper_calculate_trade_fees(
-                exec_rpt.volume * exec_rpt.price,
+                amount,
                 trade_fees,
                 exec_rpt.order_side,
                 is_fake,
