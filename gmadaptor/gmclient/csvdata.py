@@ -3,7 +3,7 @@
 # @Time     : 2022-03-09 15:08
 import datetime
 
-from gmadaptor.common.name_conversion import stockcode_to_joinquant
+from gmadaptor.common.utils import math_round
 
 
 def datetime_conversion(timestr: str):
@@ -127,7 +127,7 @@ class GMOrderReport:
         self.status = int(dict_data["status"])
         self.rej_reason = int(dict_data["ord_rej_reason(rej_reason)"])
         self.rej_detail = dict_data["ord_rej_reason_detail(rej_detail)"]
-        self.price = float(dict_data["price"])
+        self.price = math_round(float(dict_data["price"]), 2)
         self.volume = int(dict_data["volume"])
         self.filled_vol = int(dict_data["filled_volume(filled_vol)"])
         self.created_at = datetime_conversion(dict_data["created_at"])
@@ -193,7 +193,7 @@ class GMExecReport:
         self.rej_reason = int(dict_data["ord_rej_reason(rej_reason)"])
         self.rej_detail = dict_data["ord_rej_reason_detail(rej_detail)"]
         self.exec_type = int(dict_data["exec_type"])
-        self.price = float(dict_data["price"])
+        self.price = math_round(float(dict_data["price"]), 2)
         self.volume = int(dict_data["volume"])
         self.created_at = datetime_conversion(dict_data["created_at"])
         self.recv_at = datetime_conversion(dict_data["recv_at"])

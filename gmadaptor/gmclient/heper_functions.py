@@ -5,6 +5,7 @@ from time import sleep
 import cfg4py
 from gmadaptor.common.name_conversion import stockcode_to_joinquant
 from gmadaptor.common.types import OrderSide, OrderStatus, OrderType, TradeEvent
+from gmadaptor.common.utils import math_round
 from gmadaptor.gmclient.csv_utils import (
     csv_get_exec_report_data_by_sid,
     csv_get_order_status_change_data_by_sid,
@@ -16,17 +17,6 @@ from gmadaptor.gmclient.wrapper import (
     get_gm_out_csv_execreport,
     get_gm_out_csv_order_status_change,
 )
-
-
-def math_round(x: float, digits: int):
-    """由于浮点数的表示问题，很多语言的round函数与数学上的round函数不一致。下面的函数结果与数学上的一致。
-
-    Args:
-        x: 要进行四舍五入的数字
-        digits: 小数点后保留的位数
-
-    """
-    return int(x * (10**digits) + 0.5) / (10**digits)
 
 
 def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
@@ -58,19 +48,21 @@ def helper_calculate_trade_fees(amount, fees_info, order_side, is_fake):
     minimum_cost: 5.0 # 最低佣金
     掘金客户端无印花税选项，因此，不能分开计算，佣金合并印花税
     """
-    commission = math_round(amount * fees_info.commission / 10000, 2)
-    transfer_fee = math_round(amount * fees_info.transfer_fee / 10000, 2)
-
     stamp_duty = 0
-    if order_side == 2:
-        stamp_duty = math_round(amount * fees_info.stamp_duty / 10000, 2)
+    commission = math_round(amount * fees_info.commission / 10000, 2)
 
     if is_fake:  # 模拟盘无过户费，佣金和印花税合并计算
-        commission += stamp_duty
+        if order_side == 2:
+            commission = math_round(
+                amount * (fees_info.commission + fees_info.stamp_duty) / 10000, 2
+            )
         if commission < fees_info.minimum_cost:
             commission = fees_info.minimum_cost
-        return math_round(commission, 2)
+        return commission
     else:
+        if order_side == 2:
+            stamp_duty = math_round(amount * fees_info.stamp_duty / 10000, 2)
+        transfer_fee = math_round(amount * fees_info.transfer_fee / 10000, 2)
         if commission < fees_info.minimum_cost:
             commission = fees_info.minimum_cost
         return math_round(commission + transfer_fee + stamp_duty, 2)
@@ -90,7 +82,8 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     for exec_rpt in exec_reports:  # 从执行回报中取详细数据
         if exec_rpt.sid == event.entrust_no:
             total_volume += exec_rpt.volume
-            amount = math_round(exec_rpt.volume * exec_rpt.price, 2)
+            price = math_round(exec_rpt.price, 2)  # 对价格进行四舍五入，避免精度过高
+            amount = math_round(exec_rpt.volume * price, 2)  # 对金额再次四舍五入
             total_amount += amount
             total_commission += helper_calculate_trade_fees(
                 amount,
