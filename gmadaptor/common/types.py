@@ -126,12 +126,13 @@ class TradeEvent:
         self.create_at = create_at
         self.entrust_no = sid
         self.status = status
-        self.avg_price = avg_price  # 此价格计算方式待定
+        self.avg_price = avg_price
         self.filled = filled
         self.order_id = order_id
         self.reason = reason
         self.trade_fees = trade_fees
         self.recv_at = recv_at
+        self.filled_amount = 0
 
     def toDict(self):
         return {
@@ -145,6 +146,7 @@ class TradeEvent:
             "status": self.status,
             "average_price": self.avg_price,
             "filled": self.filled,
+            "filled_amount": self.filled_amount,
             "eid": self.order_id,
             "trade_fees": self.trade_fees,
             "reason": self.reason,

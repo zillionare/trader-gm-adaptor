@@ -2,6 +2,7 @@
 # @Author   : henry
 # @Time     : 2022-03-09 15:08
 import datetime
+from gmadaptor.common.name_conversion import stockcode_to_joinquant
 
 from gmadaptor.common.utils import math_round
 
@@ -41,11 +42,11 @@ class GMCash:
     def toDict(self):
         return {
             "account": self.account_id,
-            "available": self.available,
-            "pnl": self.pnl,
-            "total": self.nav,
-            "ppnl": self.pnl / self.nav,
-            "market_value": self.market_val,
+            "available": math_round(self.available, 2),
+            "pnl": math_round(self.pnl, 2),
+            "total": math_round(self.nav, 2),
+            "ppnl": self.pnl / (self.nav - self.pnl),
+            "market_value": math_round(self.market_val, 2)
         }
 
 
@@ -71,6 +72,7 @@ class GMPosition:
         self.symbol = dict_data["symbol"]
         self.side = int(dict_data["side"])
         self.volume = int(dict_data["volume"])
+        # 持仓均价小数位数比较多，z trade server暂时不用
         self.vwap = float(dict_data["vwap"])
         self.market_val = float(dict_data["market_value(market_val)"])
         self.price = float(dict_data["price"])
@@ -80,11 +82,11 @@ class GMPosition:
     def toDict(self):
         return {
             "account": self.account_id,
-            "code": self.symbol,
+            "code": stockcode_to_joinquant(self.symbol),
             "shares": self.volume,
             "sellable": self.avl_now,
             "price": self.vwap,
-            "market_value": self.market_val,
+            "market_value": math_round(self.market_val, 2),
         }
 
 
@@ -172,8 +174,8 @@ class GMExecReport:
     rej_reason: int  # 委托拒绝原因 参见
     rej_detail: str  # 委托拒绝原因描述
     exec_type: int  # 执行回报类型 参见
-    price: float  # 委托价格       ------> 市价委托情况下，此为成交均价
-    volume: int  # 委托量         ------> 市价委托情况下，此为单次成交的数量
+    price: float  # 成交价格       ------> 市价委托情况下，此为单次成交价格
+    volume: int  # 成交量         ------> 市价委托情况下，此为单次成交的数量
     created_at: datetime.datetime  # 回报创建时间
     recv_at: datetime.datetime  # 终端接收时间
     # amount: float                 # 委托成交金额   --> 暂无此字段
@@ -193,6 +195,7 @@ class GMExecReport:
         self.rej_reason = int(dict_data["ord_rej_reason(rej_reason)"])
         self.rej_detail = dict_data["ord_rej_reason_detail(rej_detail)"]
         self.exec_type = int(dict_data["exec_type"])
+        # 对价格进行指定精度处理，股票价格小数只有两位
         self.price = math_round(float(dict_data["price"]), 2)
         self.volume = int(dict_data["volume"])
         self.created_at = datetime_conversion(dict_data["created_at"])

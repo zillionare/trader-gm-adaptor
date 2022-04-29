@@ -82,8 +82,8 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     for exec_rpt in exec_reports:  # 从执行回报中取详细数据
         if exec_rpt.sid == event.entrust_no:
             total_volume += exec_rpt.volume
-            price = math_round(exec_rpt.price, 2)  # 对价格进行四舍五入，避免精度过高
-            amount = math_round(exec_rpt.volume * price, 2)  # 对金额再次四舍五入
+            # 价格从CSV读取时已四舍五入，对金额再次四舍五入
+            amount = math_round(exec_rpt.volume * exec_rpt.price, 2)
             total_amount += amount
             total_commission += helper_calculate_trade_fees(
                 amount,
@@ -97,9 +97,14 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     if total_volume == 0:
         event.avg_price = 0
     else:
+        # 平均价格不能四舍五入，否则会导致计算的结果不准确
         event.avg_price = total_amount / total_volume
+
     event.filled = total_volume
-    event.trade_fees = total_commission
+    # 汇总后的数据最后进行一次四舍五入
+    event.filled_amount = math_round(total_amount, 2)
+    event.trade_fees = math_round(total_commission)
+
     if recv_at is not None:
         event.recv_at = recv_at
 
@@ -131,6 +136,7 @@ def helper_reset_event(event):
     event.avg_price = 0
     event.filled = 0
     event.trade_fees = 0
+    event.filled_amount = 0
     event.recv_at = event.create_at
 
 
