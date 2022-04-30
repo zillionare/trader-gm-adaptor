@@ -106,6 +106,3 @@ ENV/
 
 # mkdocs build dir
 site/
-
-# skip config folder
-config/

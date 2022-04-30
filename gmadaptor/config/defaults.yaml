@@ -1,0 +1,22 @@
+﻿log_level: DEBUG
+
+server_info:
+    ip: 192.168.1.201
+    port: 9000
+    access_token : "84ae0899-7a8d-44ff-9983-4fa7cbbc424b"
+
+gm_info:
+    fake: true
+    gm_output: "/home/app/zillionare/gm-client/FileOrders/out"
+    trade_fees:
+        commission: 3
+        stamp_duty: 10
+        transfer_fee: 0.2
+        minimum_cost: 5.0
+    accounts:
+        - name: fileorder_s01
+          acct_id: 1a66e81c-ae5d-11ec-aef5-00163e0a4100
+          acct_input: "/home/app/zillionare/gm-client/FileOrders/inputs/fileorder_s01"
+        - name: fileorder_r01
+          acct_id: 13cca9dd-ae5d-11ec-aef5-00163e0a4100
+          acct_input: "/home/app/zillionare/gm-client/FileOrders/inputs/fileorder_r01"

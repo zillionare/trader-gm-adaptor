@@ -103,7 +103,7 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     event.filled = total_volume
     # 汇总后的数据最后进行一次四舍五入
     event.filled_amount = math_round(total_amount, 2)
-    event.trade_fees = math_round(total_commission)
+    event.trade_fees = math_round(total_commission, 2)
 
     if recv_at is not None:
         event.recv_at = recv_at

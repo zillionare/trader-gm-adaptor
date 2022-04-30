@@ -45,7 +45,7 @@ class GMCash:
             "available": math_round(self.available, 2),
             "pnl": math_round(self.pnl, 2),
             "total": math_round(self.nav, 2),
-            "ppnl": self.pnl / (self.nav - self.pnl),
+            "ppnl": math_round(self.pnl / (self.nav - self.pnl), 4),
             "market_value": math_round(self.market_val, 2)
         }
 
