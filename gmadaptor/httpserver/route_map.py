@@ -69,13 +69,14 @@ async def bp_mock_get_positions(request):
 async def bp_mock_buy(request):
     # 限价买入操作
     account_id = request.headers.get("Account-ID")
+    request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     price = request.json.get("price")
     volume = request.json.get("volume")
     timeout = request.json.get("timeout")
     timeout_in_ms = calculate_timeout_in_ms(timeout, 2, 5)
     logger.info(
-        f"buy: code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
+        f"buy: {request_id}, code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
     )
 
     if symbol is None or price is None or volume is None:
@@ -105,6 +106,7 @@ async def bp_mock_buy(request):
 async def bp_mock_market_buy(request):
     # 掘金文件单支持多种市价成交方式
     account_id = request.headers.get("Account-ID")
+    request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     volume = request.json.get("volume")
     if symbol is None or volume is None:
@@ -122,7 +124,7 @@ async def bp_mock_market_buy(request):
     timeout_in_ms = calculate_timeout_in_ms(timeout, 2, 5)
 
     logger.info(
-        f"market_buy: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
+        f"market_buy: {request_id}, code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
     )
 
     result = handler.wrapper_trade_operation(
@@ -148,6 +150,7 @@ async def bp_mock_market_buy(request):
 @bp_gm_adaptor.route("/sell", methods=["POST"])
 async def bp_mock_sell(request):
     account_id = request.headers.get("Account-ID")
+    request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     price = request.json.get("price")
     volume = request.json.get("volume")
@@ -158,7 +161,7 @@ async def bp_mock_sell(request):
     timeout = request.json.get("timeout")
     timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
     logger.info(
-        f"sell: code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
+        f"sell: {request_id}, code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
     )
 
     result = handler.wrapper_trade_operation(
@@ -184,6 +187,7 @@ async def bp_mock_sell(request):
 @bp_gm_adaptor.route("/market_sell", methods=["POST"])
 async def bp_mock_market_sell(request):
     account_id = request.headers.get("Account-ID")
+    request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     volume = request.json.get("volume")
     if symbol is None or volume is None:
@@ -200,7 +204,7 @@ async def bp_mock_market_sell(request):
     timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
 
     logger.info(
-        f"market_sell: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
+        f"market_sell: {request_id}, code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
     )
 
     result = handler.wrapper_trade_operation(
