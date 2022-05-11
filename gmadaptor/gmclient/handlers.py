@@ -82,7 +82,7 @@ def wrapper_trade_operation(
     sid = csv_generate_order(
         account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
-    # sid = "7093e066-fef3-4b89-90ec-2e405463b929"
+    # sid = "5e7ca387-5738-499a-96dc-f3ddc67e7826"
     if sid is None:
         return {"status": 401, "msg": "failed to append data to input file"}
 
@@ -97,12 +97,12 @@ def wrapper_trade_operation(
     report = reports[0]
     timeout_in_action = params["timeout"]  # 下个操作的超时时间
 
-    # 读取状态变化文件中的委托信息
+    # 读取状态变化文件中的委托信息， 如果返回12已过期，强行改成已撤
     event = helper_load_trade_event(report)
 
     # 状态不是（已成3，部成2）情况的委托，直接返回结果
     status = report.status
-    if status != 2 and status != 3:
+    if status != 2 and status != 3 and status != 12:
         return {"status": 200, "msg": "success", "data": event.toDict()}
 
     # 2和3的委托，再读取成交记录

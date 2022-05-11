@@ -53,8 +53,8 @@ class OrderStatus(IntEnum):
         return status_map.get(status_cn)
 
     def convert(gm_status: int):
-        # 未知，已过期，挂起，已拒绝
-        if gm_status == 0 or gm_status == 12 or gm_status == 9 or gm_status == 8:
+        # 未知，挂起，已拒绝
+        if gm_status == 0 or gm_status == 9 or gm_status == 8:
             return OrderStatus.ERROR
         # 已报，待报，待撤
         if gm_status == 1 or gm_status == 10 or gm_status == 6:
@@ -65,8 +65,8 @@ class OrderStatus(IntEnum):
         # 全部成交
         if gm_status == 3:
             return OrderStatus.ALL_TRANSACTIONS
-        # 已撤
-        if gm_status == 5:
+        # 已撤，或者已过期
+        if gm_status == 5 or gm_status == 12:
             return OrderStatus.CANCEL_ALL_ORDERS
 
         return OrderStatus.ERROR
