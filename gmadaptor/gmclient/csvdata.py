@@ -2,8 +2,8 @@
 # @Author   : henry
 # @Time     : 2022-03-09 15:08
 import datetime
-from gmadaptor.common.name_conversion import stockcode_to_joinquant
 
+from gmadaptor.common.name_conversion import stockcode_to_joinquant
 from gmadaptor.common.utils import math_round
 
 
@@ -46,7 +46,7 @@ class GMCash:
             "pnl": math_round(self.pnl, 2),
             "total": math_round(self.nav, 2),
             "ppnl": math_round(self.pnl / (self.nav - self.pnl), 4),
-            "market_value": math_round(self.market_val, 2)
+            "market_value": math_round(self.market_val, 2),
         }
 
 
@@ -55,7 +55,7 @@ class GMPosition:
     symbol: str  # 证券代码(市场.代码)如:SZSE.000001
     side: int  # 持仓方向 参见
     volume: int  # 总持仓量; 昨持仓量(volume-vol_today)
-    # vol_today: int  # 今日持仓量
+    vol_today: int  # 今日持仓量
     vwap: float  # 持仓均价
     # vwap_dild: float    # 摊薄持仓均价
     market_val: float  # 持仓市值
@@ -72,6 +72,7 @@ class GMPosition:
         self.symbol = dict_data["symbol"]
         self.side = int(dict_data["side"])
         self.volume = int(dict_data["volume"])
+        self.vol_today = int(dict_data["volume_today(vol_today)"])
         # 持仓均价小数位数比较多，z trade server暂时不用
         self.vwap = float(dict_data["vwap"])
         self.market_val = float(dict_data["market_value(market_val)"])
@@ -84,7 +85,7 @@ class GMPosition:
             "account": self.account_id,
             "code": stockcode_to_joinquant(self.symbol),
             "shares": self.volume,
-            "sellable": self.avl_now,
+            "sellable": self.avl_now + self.vol_today,  # 掘金可卖数量更新不及时，需要汇总
             "price": self.vwap,
             "market_value": math_round(self.market_val, 2),
         }
