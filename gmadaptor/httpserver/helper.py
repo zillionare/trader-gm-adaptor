@@ -41,11 +41,11 @@ def calculate_timeout_in_ms(
     """
 
     if timeout is None:
-        return default_val * 1000
+        return int(default_val * 1000)
 
     if timeout < min_val:
-        return min_val * 1000
+        return int(min_val * 1000)
     if timeout > 60:
         return 60 * 1000
 
-    return timeout * 1000
+    return int(timeout * 1000)

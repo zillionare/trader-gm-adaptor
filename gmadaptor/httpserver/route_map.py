@@ -72,7 +72,7 @@ async def bp_mock_buy(request):
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     price = request.json.get("price")
-    volume = request.json.get("volume")
+    volume = int(request.json.get("volume"))
     timeout = request.json.get("timeout")
     timeout_in_ms = calculate_timeout_in_ms(timeout, 2, 5)
     logger.info(
@@ -108,7 +108,7 @@ async def bp_mock_market_buy(request):
     account_id = request.headers.get("Account-ID")
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
-    volume = request.json.get("volume")
+    volume = int(request.json.get("volume"))
     if symbol is None or volume is None:
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
@@ -153,7 +153,7 @@ async def bp_mock_sell(request):
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
     price = request.json.get("price")
-    volume = request.json.get("volume")
+    volume = int(request.json.get("volume"))
     if symbol is None or price is None or volume is None:
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
@@ -189,7 +189,7 @@ async def bp_mock_market_sell(request):
     account_id = request.headers.get("Account-ID")
     request_id = request.headers.get("Request-ID")
     symbol = request.json.get("security")
-    volume = request.json.get("volume")
+    volume = int(request.json.get("volume"))
     if symbol is None or volume is None:
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
