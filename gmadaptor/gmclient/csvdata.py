@@ -4,7 +4,7 @@
 import datetime
 
 from gmadaptor.common.name_conversion import stockcode_to_joinquant
-from gmadaptor.common.utils import math_round
+from gmadaptor.common.utils import math_round, safe_float, safe_int
 
 
 def datetime_conversion(timestr: str):
@@ -31,21 +31,27 @@ class GMCash:
 
     def __init__(self, dict_data):
         self.account_id = dict_data["account_id"]
-        self.market_val = float(dict_data["market_value(market_val)"])
-        self.nav = float(dict_data["nav"])
-        self.pnl = float(dict_data["pnl"])
-        self.fpnl = float(dict_data["fpnl"])
-        self.frozen = float(dict_data["frozen"])
-        self.available = float(dict_data["available"])
-        self.balance = float(dict_data["balance"])
+        self.market_val = safe_float(dict_data["market_value(market_val)"])
+        self.nav = safe_float(dict_data["nav"])
+        self.pnl = safe_float(dict_data["pnl"])
+        self.fpnl = safe_float(dict_data["fpnl"])
+        self.frozen = safe_float(dict_data["frozen"])
+        self.available = safe_float(dict_data["available"])
+        self.balance = safe_float(dict_data["balance"])
 
     def toDict(self):
+        total = self.nav - self.pnl
+        if total == 0:
+            _ppnl = 0
+        else:
+            _ppnl = math_round(self.pnl / total, 4)
+
         return {
             "account": self.account_id,
             "available": math_round(self.available, 2),
             "pnl": math_round(self.pnl, 2),
             "total": math_round(self.nav, 2),
-            "ppnl": math_round(self.pnl / (self.nav - self.pnl), 4),
+            "ppnl": _ppnl,
             "market_value": math_round(self.market_val, 2),
         }
 
@@ -70,15 +76,15 @@ class GMPosition:
     def __init__(self, dict_data):
         self.account_id = dict_data["account_id"]
         self.symbol = dict_data["symbol"]
-        self.side = int(dict_data["side"])
-        self.volume = int(dict_data["volume"])
-        self.vol_today = int(dict_data["volume_today(vol_today)"])
+        self.side = safe_int(dict_data["side"])
+        self.volume = safe_int(dict_data["volume"])
+        self.vol_today = safe_int(dict_data["volume_today(vol_today)"])
         # 持仓均价小数位数比较多，z trade server暂时不用
-        self.vwap = float(dict_data["vwap"])
-        self.market_val = float(dict_data["market_value(market_val)"])
-        self.price = float(dict_data["price"])
-        self.fpnl = float(dict_data["fpnl"])
-        self.avl_now = int(dict_data["available_now(avl_now)"])
+        self.vwap = safe_float(dict_data["vwap"])
+        self.market_val = safe_float(dict_data["market_value(market_val)"])
+        self.price = safe_float(dict_data["price"])
+        self.fpnl = safe_float(dict_data["fpnl"])
+        self.avl_now = safe_int(dict_data["available_now(avl_now)"])
 
     def toDict(self):
         return {
@@ -125,14 +131,14 @@ class GMOrderReport:
         self.cl_ord_id = dict_data["cl_ord_id"]
         self.order_id = dict_data["order_id"]
         self.symbol = dict_data["symbol"]
-        self.order_type = int(dict_data["order_type"])
-        self.order_side = int(dict_data["order_business(order_biz)"])
-        self.status = int(dict_data["status"])
-        self.rej_reason = int(dict_data["ord_rej_reason(rej_reason)"])
+        self.order_type = safe_int(dict_data["order_type"])
+        self.order_side = safe_int(dict_data["order_business(order_biz)"])
+        self.status = safe_int(dict_data["status"])
+        self.rej_reason = safe_int(dict_data["ord_rej_reason(rej_reason)"])
         self.rej_detail = dict_data["ord_rej_reason_detail(rej_detail)"]
-        self.price = math_round(float(dict_data["price"]), 2)
-        self.volume = int(dict_data["volume"])
-        self.filled_vol = int(dict_data["filled_volume(filled_vol)"])
+        self.price = math_round(safe_float(dict_data["price"]), 2)
+        self.volume = safe_int(dict_data["volume"])
+        self.filled_vol = safe_int(dict_data["filled_volume(filled_vol)"])
         self.created_at = datetime_conversion(dict_data["created_at"])
         self.recv_at = datetime_conversion(dict_data["recv_at"])
         # 暂时不需要剩下2个时间参数
@@ -191,14 +197,14 @@ class GMExecReport:
         self.order_id = dict_data["order_id"]
         self.exec_id = dict_data["exec_id"]
         self.symbol = dict_data["symbol"]
-        self.order_type = int(dict_data["order_type"])
-        self.order_side = int(dict_data["order_business(order_biz)"])
-        self.rej_reason = int(dict_data["ord_rej_reason(rej_reason)"])
+        self.order_type = safe_int(dict_data["order_type"])
+        self.order_side = safe_int(dict_data["order_business(order_biz)"])
+        self.rej_reason = safe_int(dict_data["ord_rej_reason(rej_reason)"])
         self.rej_detail = dict_data["ord_rej_reason_detail(rej_detail)"]
-        self.exec_type = int(dict_data["exec_type"])
+        self.exec_type = safe_int(dict_data["exec_type"])
         # 对价格进行指定精度处理，股票价格小数只有两位
-        self.price = math_round(float(dict_data["price"]), 2)
-        self.volume = int(dict_data["volume"])
+        self.price = math_round(safe_float(dict_data["price"]), 2)
+        self.volume = safe_int(dict_data["volume"])
         self.created_at = datetime_conversion(dict_data["created_at"])
         self.recv_at = datetime_conversion(dict_data["recv_at"])
 

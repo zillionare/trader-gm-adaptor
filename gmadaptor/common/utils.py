@@ -10,3 +10,17 @@ def math_round(x: float, digits: int):
         return int(x * (10**digits) - 0.5) / (10**digits)
     else:
         return int(x * (10**digits) + 0.5) / (10**digits)
+
+
+def safe_float(val: str):
+    if val is None or len(val) == 0:
+        return 0.0
+    else:
+        return float(val)
+
+
+def safe_int(val: str):
+    if val is None or len(val) == 0:
+        return 0
+    else:
+        return int(val)
