@@ -137,7 +137,7 @@ def helper_reset_event(event):
     event.filled = 0
     event.trade_fees = 0
     event.filled_amount = 0
-    event.recv_at = event.create_at
+    event.recv_at = event.created_at
 
 
 def helper_set_gm_order_side(order_side):

@@ -108,7 +108,7 @@ class TradeEvent:
         volume: int,
         order_side: int,
         bid_type: int,
-        create_at: datetime.datetime,
+        created_at: datetime.datetime,
         sid: str,
         status: int,
         avg_price: float,
@@ -123,7 +123,7 @@ class TradeEvent:
         self.volume = volume
         self.order_side = order_side
         self.bid_type = bid_type
-        self.create_at = create_at
+        self.created_at = created_at
         self.entrust_no = sid
         self.status = status
         self.avg_price = avg_price
@@ -141,7 +141,7 @@ class TradeEvent:
             "volume": self.volume,
             "order_side": self.order_side,
             "bid_type": self.bid_type,
-            "time": self.create_at.strftime("%Y-%m-%d %H:%M:%S.%f"),
+            "time": self.created_at.strftime("%Y-%m-%d %H:%M:%S.%f"),
             "entrust_no": self.entrust_no,
             "status": self.status,
             "average_price": self.avg_price,
