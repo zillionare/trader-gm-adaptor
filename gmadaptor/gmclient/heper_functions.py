@@ -165,6 +165,7 @@ def helper_get_order_status_change_data(account_id, sid, params):
     reports = []  # 定义成空值，避免和None冲突
     timeout_in_action = params["timeout"]  # 毫秒
     while timeout_in_action > 0:
+        reports.clear()  # 清空列表
         result = csv_get_order_status_change_data_by_sid(status_file, sid)
         result_status = result["result"]
         if result_status != -1:  # 保存查询到的结果，继续查看，-1代表未查询到结果
