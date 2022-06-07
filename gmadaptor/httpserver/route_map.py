@@ -318,8 +318,13 @@ async def bp_mock_get_today_entrusts(request):
     else:
         return_list = datalist
 
-    for item in return_list.keys():
-        logger.info(f"today_entrusts result: {item}\n{return_list[item]}")
+    if len(return_list) > 0:
+        for item in return_list.keys():
+            logger.info(f"today_entrusts result: {item}\n{return_list[item]}")
+    else:
+        logger.info(
+            "today_entrusts result: no results found, datalist: %d", len(datalist)
+        )
     return response.json(make_response(0, "OK", return_list))
 
 
