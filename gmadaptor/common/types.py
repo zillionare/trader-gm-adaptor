@@ -35,22 +35,11 @@ class OrderType(IntEnum):
 
 class OrderStatus(IntEnum):
     ERROR = -1  # 异常
-    NO_DEAL = 1  # 未成交
-    PARTIAL_TRANSACTION = 2  # #部分成交
-    ALL_TRANSACTIONS = 3  # 全部成交
-    CANCEL_ALL_ORDERS = 4  # 全部撤单
-
-    @classmethod
-    def get_status(cls, status_cn):
-        status_map = {
-            "未成交": cls.NO_DEAL.value,
-            "部分成交": cls.PARTIAL_TRANSACTION.value,
-            "全部成交": cls.ALL_TRANSACTIONS.value,
-            "全部撤单": cls.CANCEL_ALL_ORDERS.value,
-            "异常": cls.ERROR.value,
-        }
-
-        return status_map.get(status_cn)
+    RECEIVED = 0  # 已接收
+    SUBMITTED = 1  # 已报
+    PARTIAL_TX = 2  # #部分成交
+    ALL_TX = 3  # 全部成交
+    CANCELED = 4  # 撤单
 
     def convert(gm_status: int):
         # 未知，挂起，已拒绝
@@ -58,16 +47,16 @@ class OrderStatus(IntEnum):
             return OrderStatus.ERROR
         # 已报，待报，待撤
         if gm_status == 1 or gm_status == 10 or gm_status == 6:
-            return OrderStatus.NO_DEAL
+            return OrderStatus.SUBMITTED
         # 部分成交
         if gm_status == 2:
-            return OrderStatus.PARTIAL_TRANSACTION
+            return OrderStatus.PARTIAL_TX
         # 全部成交
         if gm_status == 3:
-            return OrderStatus.ALL_TRANSACTIONS
+            return OrderStatus.ALL_TX
         # 已撤，或者已过期
         if gm_status == 5 or gm_status == 12:
-            return OrderStatus.CANCEL_ALL_ORDERS
+            return OrderStatus.CANCELED
 
         return OrderStatus.ERROR
 
@@ -133,6 +122,7 @@ class TradeEvent:
         self.trade_fees = trade_fees
         self.recv_at = recv_at
         self.filled_amount = 0
+        self.invalid = False
 
     def toDict(self):
         return {

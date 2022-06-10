@@ -3,8 +3,12 @@
 # @Time     : 2022-03-09 15:08
 import datetime
 
-from gmadaptor.common.name_conversion import stockcode_to_joinquant
-from gmadaptor.common.utils import math_round, safe_float, safe_int
+from gmadaptor.common.utils import (
+    math_round,
+    safe_float,
+    safe_int,
+    stockcode_to_joinquant,
+)
 
 
 def datetime_conversion(timestr: str):

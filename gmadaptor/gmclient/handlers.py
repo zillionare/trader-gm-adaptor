@@ -5,9 +5,8 @@ import csv
 import logging
 from time import sleep
 
-from cfg4py.config import Config
-from gmadaptor.common.name_conversion import stockcode_to_myquant
 from gmadaptor.common.types import OrderSide, OrderStatus, OrderType
+from gmadaptor.common.utils import stockcode_to_myquant
 from gmadaptor.gmclient.csv_utils import (
     csv_generate_cancel_order,
     csv_generate_order,
@@ -20,6 +19,8 @@ from gmadaptor.gmclient.heper_functions import (
     helper_get_data_from_exec_reports,
     helper_get_order_status_change_by_sidlist,
     helper_get_order_status_change_data,
+    helper_init_trade_event,
+    helper_keep_entrust_state,
     helper_load_trade_event,
     helper_set_gm_order_side,
     helper_set_gm_order_type,
@@ -75,32 +76,38 @@ def wrapper_trade_operation(
     limit_price: float = None,
     timeout_in_action: float = 1000,  # 毫秒
 ):
+    # 写入扫单文件
     myquant_code = stockcode_to_myquant(security)
     gm_order_side = helper_set_gm_order_side(order_side)
     gm_order_type = helper_set_gm_order_type(order_type)
-
     sid = csv_generate_order(
         account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
-    # sid = "5e7ca387-5738-499a-96dc-f3ddc67e7826"
+    # sid = "ae129a25-38a2-48c6-84e6-acf1045e9a1c"
     if sid is None:
-        return {"status": 401, "msg": "failed to append data to input file"}
+        return {"status": 401, "msg": "failed to append data to order file"}
 
     params = {"timeout": timeout_in_action}
     # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
     reports = helper_get_order_status_change_data(account_id, sid, params)
-    if reports is None:
-        return {"status": 500, "msg": "委托状态变化文件没找到"}
-    if len(reports) == 0:
-        return {"status": 500, "msg": "failed to get result of this entrust"}
+    if reports is None or len(reports) == 0:
+        logger.error("failed to get status change result, %s, %s", account_id, sid)
+        # 如果客户端重启失败导致读取不到数据，SID返回给调用者之后，需要手动恢复这些委托的执行
+        tmp_event = helper_init_trade_event(
+            security, price, volume, order_side, order_type, sid
+        )
+        return {"status": 200, "msg": "success", "data": tmp_event.toDict()}
 
     report = reports[0]
     timeout_in_action = params["timeout"]  # 下个操作的超时时间
+    if timeout_in_action < 0:
+        timeout_in_action = 100  # 恢复超时，至少读取一次执行汇报文件
 
-    # 读取状态变化文件中的委托信息， 如果返回12已过期，强行改成已撤
+    # 读取状态变化文件中的委托信息后，准备读取执行汇报的详细成交记录
+    # 掘金模拟盘返回12超期，东财保持已报的状态，如果返回12已过期，强行改成已撤
     event = helper_load_trade_event(report)
 
-    # 状态不是（已成3，部成2）情况的委托，直接返回结果
+    # 状态不是（已成3，部成2）情况的委托，直接返回结果；12可能是1或者2导致的
     status = report.status
     if status != 2 and status != 3 and status != 12:
         return {"status": 200, "msg": "success", "data": event.toDict()}
@@ -109,13 +116,16 @@ def wrapper_trade_operation(
     exec_reports = helper_get_data_from_exec_reports(
         account_id, sid, event, timeout_in_action
     )
-    if exec_reports is None:
-        return {"status": 500, "msg": "执行回报文件没找到"}
-    if len(exec_reports) == 0:
-        # 查询不到结果，留给z trade server后续校正
-        return {"status": 500, "msg": "failed to get result of this entrust"}
+    if exec_reports is None or len(exec_reports) == 0:
+        # 如果客户端没启动成功，前面的状态变化文件读取时就会报错，这里直接返回
+        logger.error("failed to get exec report of entrust, %s, %s", account_id, sid)
+        newevent = helper_keep_entrust_state(event)
+        return {"status": 200, "msg": "success", "data": newevent.toDict()}
 
-    return {"status": 200, "msg": "success", "data": event.toDict()}
+    if event.invalid:  # 数据非法
+        return {"status": 500, "msg": "entrust data invalid!"}
+    else:
+        return {"status": 200, "msg": "success", "data": event.toDict()}
 
 
 def wrapper_cancel_entursts(account_id: str, sid_list):
@@ -127,15 +137,21 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
     if result != 0:
         return {
             "status": 401,
-            "msg": "failed to append data to input file, check lock or file",
+            "msg": "failed to append data to order cancel file",
         }
 
     # 从状态更新文件中读取撤销结果，{}字典
     reports = helper_get_order_status_change_by_sidlist(account_id, sid_list)
     if reports is None:
-        return {"status": 500, "msg": f"委托状态变化文件没找到: {account_id}"}
+        return {
+            "status": 500,
+            "msg": f"cancel_entrusts, status change not found: {account_id}",
+        }
     if len(reports) == 0:
-        return {"status": 500, "msg": "failed to get result of these entrusts"}
+        return {
+            "status": 500,
+            "msg": "cancel_entrusts, failed to get status change results",
+        }
 
     # 重新生成SID列表，可能有的委托从状态变化文件中读取失败了
     new_sid_list = list(reports.keys())
@@ -143,7 +159,7 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
     # 取出所有执行报告中的委托数据
     all_exec_reports = csv_get_exec_report_data(account_id, new_sid_list)
     if all_exec_reports is None:
-        return {"status": 500, "msg": "执行回报文件没找到"}
+        return {"status": 500, "msg": "cancel_entrusts, exec report file not found"}
 
     result_events = {}
     # 撤销委托的order_status数据里面，没有成交信息，order_status_change里面没有成交价格
@@ -153,7 +169,10 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
         if len(all_exec_reports) > 0:
             helper_sum_exec_reports_by_sid(all_exec_reports, event)
 
-        result_events[event.entrust_no] = event.toDict()
+        if event.invalid:
+            logger.error("cancel_entrusts, entrust data invalid, %s", event.entrust_no)
+        else:
+            result_events[event.entrust_no] = event.toDict()
 
     return {"status": 200, "msg": "OK", "data": result_events}
 
@@ -162,18 +181,21 @@ def wrapper_get_today_all_entrusts(account_id: str):
     # 取出所有日内委托数据
     all_entrusts = csv_get_order_status(account_id)
     if all_entrusts is None:
-        return {"status": 500, "msg": "order status file not found of this account"}
+        return {
+            "status": 500,
+            "msg": "today_entrusts, order status not found of this account",
+        }
 
     # 取出所有执行报告中的委托数据
     all_exec_reports = csv_get_exec_report_data(account_id, None)
     if all_exec_reports is None:
-        return {"status": 500, "msg": "执行回报文件没找到"}
+        return {"status": 500, "msg": "today_entrusts, exec report file not found"}
 
     result_events = {}
     for entrust in all_entrusts:
         event = helper_load_trade_event(entrust)
         event_status = event.status
-        if event_status == OrderStatus.ERROR or event_status == OrderStatus.NO_DEAL:
+        if event_status == OrderStatus.ERROR or event_status == OrderStatus.SUBMITTED:
             # 无成交数据返回的情况
             result_events[event.entrust_no] = event.toDict()
             continue
@@ -182,7 +204,10 @@ def wrapper_get_today_all_entrusts(account_id: str):
         if len(all_exec_reports) > 0:
             helper_sum_exec_reports_by_sid(all_exec_reports, event)
 
-        result_events[event.entrust_no] = event.toDict()
+        if event.invalid:
+            logger.error("today_entrusts, invalid entrust: %s", event.entrust_no)
+        else:
+            result_events[event.entrust_no] = event.toDict()
 
     return {"status": 200, "msg": "success", "data": result_events}
 

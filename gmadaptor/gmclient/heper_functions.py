@@ -1,11 +1,11 @@
-from asyncio.log import logger
+import datetime
+import logging
 from os import path
 from time import sleep
 
 import cfg4py
-from gmadaptor.common.name_conversion import stockcode_to_joinquant
 from gmadaptor.common.types import OrderSide, OrderStatus, OrderType, TradeEvent
-from gmadaptor.common.utils import math_round
+from gmadaptor.common.utils import math_round, stockcode_to_joinquant
 from gmadaptor.gmclient.csv_utils import (
     csv_get_exec_report_data_by_sid,
     csv_get_order_status_change_data_by_sid,
@@ -18,6 +18,29 @@ from gmadaptor.gmclient.wrapper import (
     get_gm_out_csv_order_status_change,
 )
 
+logger = logging.getLogger(__name__)
+
+
+def helper_init_trade_event(code, price, volume, order_side, order_type, sid):
+    # 如果从状态变化文件读取不到数据，返回下面的默认值
+    event = TradeEvent(
+        code,  # z trade server传过来的代码，已经按照聚宽格式化
+        price,  # 委托价格
+        volume,
+        order_side,
+        order_type,
+        datetime.datetime.now(),
+        sid,
+        OrderStatus.RECEIVED,
+        0.0,  # avg price
+        0,  # filled
+        "",  # order id
+        0,  # trade fees
+        "",  # reject detail
+        datetime.datetime.now(),  # recv at
+    )
+    return event
+
 
 def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
     event = TradeEvent(
@@ -29,29 +52,28 @@ def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
         order_status_record.created_at,
         order_status_record.sid,
         OrderStatus.convert(order_status_record.status),
-        0.0,
-        0,
+        0.0,  # avg price
+        0,  # filled
         order_status_record.order_id,
-        0,
+        0,  # trade fees
         order_status_record.rej_detail,
         order_status_record.recv_at,
     )
-
     return event
 
 
-def helper_calculate_trade_fees(amount, fees_info, order_side, is_fake):
+def helper_calculate_trade_fees(amount, fees_info, order_side, is_sim):
     """交易费用计算
     commission: 0.03  # 券商佣金，万分之三
     stamp_duty: 0.1 # 印花税，千分之一
-    transfer_fee: 0.002 # 过户费，万分之0.2
+    transfer_fee: 0.002 # 过户费，万分之0.1/0.2，政策会调整
     minimum_cost: 5.0 # 最低佣金
     掘金客户端无印花税选项，因此，不能分开计算，佣金合并印花税
     """
     stamp_duty = 0
     commission = math_round(amount * fees_info.commission / 10000, 2)
 
-    if is_fake:  # 模拟盘无过户费，佣金和印花税合并计算
+    if is_sim:  # 模拟盘无过户费，佣金和印花税合并计算
         if order_side == 2:
             commission = math_round(
                 amount * (fees_info.commission + fees_info.stamp_duty) / 10000, 2
@@ -59,7 +81,7 @@ def helper_calculate_trade_fees(amount, fees_info, order_side, is_fake):
         if commission < fees_info.minimum_cost:
             commission = fees_info.minimum_cost
         return commission
-    else:
+    else:  # 实盘需要对照交割单修正
         if order_side == 2:
             stamp_duty = math_round(amount * fees_info.stamp_duty / 10000, 2)
         transfer_fee = math_round(amount * fees_info.transfer_fee / 10000, 2)
@@ -69,10 +91,10 @@ def helper_calculate_trade_fees(amount, fees_info, order_side, is_fake):
 
 
 # 更新读取到的委托交易信息（执行回报文件中的数据）
-def helper_sum_exec_reports_by_sid(exec_reports, event):
+def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
     server_config = cfg4py.get_instance()
     trade_fees = server_config.gm_info.trade_fees
-    is_fake = server_config.gm_info.fake
+    is_sim = server_config.gm_info.fake
 
     total_volume = 0
     total_amount = 0.0  # 总资金量
@@ -89,7 +111,7 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
                 amount,
                 trade_fees,
                 exec_rpt.order_side,
-                is_fake,
+                is_sim,
             )
             recv_at = exec_rpt.recv_at
 
@@ -105,39 +127,46 @@ def helper_sum_exec_reports_by_sid(exec_reports, event):
     event.filled_amount = math_round(total_amount, 2)
     event.trade_fees = math_round(total_commission, 2)
 
-    if recv_at is not None:
+    if recv_at is not None:  # 更新最后的成交时间
         event.recv_at = recv_at
 
-    if event.status == OrderStatus.ALL_TRANSACTIONS:
+    if event.status == OrderStatus.ALL_TX:
         # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
-        if event.volume != event.filled:
-            logger.warning("全成的委托，读取的数据不完整: %s -> %s", event.entrust_no, event.code)
-            helper_reset_event(event)
-            return False  # 数据不完整，可以继续尝试几次
+        if event.filled == event.volume:
+            return 0
+        elif event.filled < event.volume:
+            logger.error("全成的委托，读取的数据不完整: %s -> %s", event.entrust_no, event.code)
+            helper_reset_event(event, True)
+            return 1  # 数据不完整，继续读取
         else:
-            return True  # 结束循环
+            logger.error("全成的委托，成交量大于委托量: %s -> %s", event.entrust_no, event.code)
+            helper_reset_event(event, True)
+            return -1  # 数据错误，结束尝试
 
-    if (
-        event.status == OrderStatus.PARTIAL_TRANSACTION
-        or event.status == OrderStatus.CANCEL_ALL_ORDERS
-    ):
-        if event.volume < event.filled:
+    if event.status == OrderStatus.PARTIAL_TX or event.status == OrderStatus.CANCELED:
+        if event.filled > event.volume:
             logger.error("部成和已撤的委托，成交量大于委托量，不正确：%s -> %s", event.entrust_no, event.code)
-            helper_reset_event(event)
-            return True  # 已经错误，不再继续执行
+            helper_reset_event(event, True)
+            return -1  # 已经错误，不再继续执行
+        elif event.volume == event.filled:
+            return 0  # 已经完成，不再继续执行
         else:
-            return False  # 数据可能不完整，可以继续尝试几次
+            return 1  # 数据可能不完整，可以继续尝试几次
 
-    return True  # 其他情况不继续处理了
+    if event.filled != 0:
+        return -1
+    else:
+        return 0  # 其他情况不继续处理了
 
 
 # 循环读取执行回报之前，清除掉交易信息
-def helper_reset_event(event):
+def helper_reset_event(event, invalid=False):
     event.avg_price = 0
     event.filled = 0
     event.trade_fees = 0
     event.filled_amount = 0
     event.recv_at = event.created_at
+    event.invalid = invalid  # 标记是否为无效数据
 
 
 def helper_set_gm_order_side(order_side):
@@ -207,7 +236,7 @@ def helper_get_order_status_change_by_sidlist(account_id, sid_list):
     return reports
 
 
-# 从执行回报文件中读取状态的详细信息，调用者：wrapper_trade_operation
+# 从执行回报文件中读取状态的详细信息，唯一调用者：wrapper_trade_operation
 def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action):
     rpt_file = get_gm_out_csv_execreport(account_id)
     if not path.exists(rpt_file):
@@ -219,10 +248,25 @@ def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action)
         helper_reset_event(event)  # 每次循环前，清除交易信息
         exec_reports = csv_get_exec_report_data_by_sid(rpt_file, sid)
         if len(exec_reports) > 0:  # 收集到了至少一条数据
-            if helper_sum_exec_reports_by_sid(exec_reports, event):
+            rc = helper_sum_exec_reports_by_sid(exec_reports, event)
+            if rc == 0 or rc == -1:
                 break
 
         sleep(200 / 1000)
         timeout_in_action -= 200
 
     return exec_reports
+
+
+# 交易操作最后调用，状态2和3的情况，应该有数据，但是没读到
+def helper_keep_entrust_state(event: TradeEvent):
+    # force to reset event
+    helper_reset_event(event)
+
+    if event.status == OrderStatus.ALL_TX:
+        event.status = OrderStatus.PARTIAL_TX  # 下次再读
+    elif event.status == OrderStatus.CANCELED:  # 只有一种可能，过了15点
+        # 收盘后再查询时，会处理资金和股数退还，第二天9点核对账号时再检查数据一致性
+        event.status = OrderStatus.SUBMITTED
+
+    return event
