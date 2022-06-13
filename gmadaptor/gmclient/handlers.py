@@ -100,7 +100,7 @@ def wrapper_trade_operation(
 
     report = reports[0]
     timeout_in_action = params["timeout"]  # 下个操作的超时时间
-    if timeout_in_action < 0:
+    if timeout_in_action <= 0:
         timeout_in_action = 100  # 恢复超时，至少读取一次执行汇报文件
 
     # 读取状态变化文件中的委托信息后，准备读取执行汇报的详细成交记录
