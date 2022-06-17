@@ -62,18 +62,17 @@ def helper_load_trade_event(order_status_record: GMOrderReport) -> TradeEvent:
     return event
 
 
-def helper_calculate_trade_fees(amount, fees_info, order_side, is_sim):
+def helper_calculate_trade_fees(is_shex, amount, fees_info, order_side, is_sim):
     """交易费用计算
-    commission: 0.03  # 券商佣金，万分之三
-    stamp_duty: 0.1 # 印花税，千分之一
-    transfer_fee: 0.002 # 过户费，万分之0.1/0.2，政策会调整
+    commission: 2.5  # 券商佣金，万分之2.5
+    stamp_duty: 10 # 印花税，千分之一
+    transfer_fee: 0.1 # 过户费，万分之0.1/0.2，政策会调整
     minimum_cost: 5.0 # 最低佣金
     掘金客户端无印花税选项，因此，不能分开计算，佣金合并印花税
     """
     stamp_duty = 0
-    commission = math_round(amount * fees_info.commission / 10000, 2)
-
-    if is_sim:  # 模拟盘无过户费，佣金和印花税合并计算
+    if is_sim:  # 模拟盘无过户费，佣金和印花税合并计算，逐笔成交均计算
+        commission = math_round(amount * fees_info.commission / 10000, 2)
         if order_side == 2:
             commission = math_round(
                 amount * (fees_info.commission + fees_info.stamp_duty) / 10000, 2
@@ -81,20 +80,35 @@ def helper_calculate_trade_fees(amount, fees_info, order_side, is_sim):
         if commission < fees_info.minimum_cost:
             commission = fees_info.minimum_cost
         return commission
-    else:  # 实盘需要对照交割单修正
+    else:  # 实盘需要对照交割单修正，佣金按照委托为单位，过户费分上证和深证，后者不收取
         if order_side == 2:
             stamp_duty = math_round(amount * fees_info.stamp_duty / 10000, 2)
-        transfer_fee = math_round(amount * fees_info.transfer_fee / 10000, 2)
-        if commission < fees_info.minimum_cost:
-            commission = fees_info.minimum_cost
-        return math_round(commission + transfer_fee + stamp_duty, 2)
+        if is_shex:
+            transfer_fee = math_round(amount * fees_info.transfer_fee / 10000, 2)
+        else:
+            transfer_fee = 0  # 深证暂时不收取过户费
+        return math_round(transfer_fee + stamp_duty, 2)
+
+
+def helper_calculate_trade_fees_for_real(total_amount, fees_info):
+    """实盘券商佣金计算
+    commission: 2.5  # 券商佣金，万分之2.5
+    minimum_cost: 5.0 # 最低佣金
+    """
+    commission = math_round(total_amount * fees_info.commission / 10000, 2)
+    if commission < fees_info.minimum_cost:
+        commission = fees_info.minimum_cost
+    return commission
 
 
 # 更新读取到的委托交易信息（执行回报文件中的数据）
 def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
     server_config = cfg4py.get_instance()
-    trade_fees = server_config.gm_info.trade_fees
+    trade_fees_info = server_config.gm_info.trade_fees
     is_sim = server_config.gm_info.fake
+    is_shex = False
+    if event.code.startswith("60"):
+        is_shex = True
 
     total_volume = 0
     total_amount = 0.0  # 总资金量
@@ -108,12 +122,17 @@ def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
             amount = math_round(exec_rpt.volume * exec_rpt.price, 2)
             total_amount += amount
             total_commission += helper_calculate_trade_fees(
+                is_shex,
                 amount,
-                trade_fees,
+                trade_fees_info,
                 exec_rpt.order_side,
                 is_sim,
             )
             recv_at = exec_rpt.recv_at
+
+    if not is_sim:  # 实盘针对委托计算佣金
+        commission = helper_calculate_trade_fees_for_real(total_amount, trade_fees_info)
+        total_commission += commission
 
     # 平均价格的计算暂时不纳入手续费
     if total_volume == 0:

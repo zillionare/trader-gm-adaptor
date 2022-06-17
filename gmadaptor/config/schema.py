@@ -37,9 +37,9 @@ class Config(object):
         gm_output: Optional[str] = None
 
         class trade_fees:
-            commission: Optional[int] = None
+            commission: Optional[float] = None
 
-            stamp_duty: Optional[int] = None
+            stamp_duty: Optional[float] = None
 
             transfer_fee: Optional[float] = None
 

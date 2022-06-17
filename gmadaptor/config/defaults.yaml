@@ -6,12 +6,12 @@ server_info:
     access_token : "84ae0899-7a8d-44ff-9983-4fa7cbbc424b"
 
 gm_info:
-    fake: true
+    fake: false
     gm_output: "/home/henry/zillionare/gm-client/FileOrders/out"
     trade_fees:
-        commission: 3
-        stamp_duty: 10
-        transfer_fee: 0.2
+        commission: 2.5
+        stamp_duty: 10.0
+        transfer_fee: 0.1
         minimum_cost: 5.0
     accounts:
         - name: fileorder_s01
