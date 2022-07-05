@@ -31,7 +31,7 @@ def helper_init_trade_event(code, price, volume, order_side, order_type, sid):
         order_type,
         datetime.datetime.now(),
         sid,
-        OrderStatus.RECEIVED,
+        OrderStatus.SUBMITTED,
         0.0,  # avg price
         0,  # filled
         "",  # order id
@@ -151,16 +151,15 @@ def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
 
     if event.status == OrderStatus.ALL_TX:
         # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
-        if event.filled == event.volume:
-            return 0
-        elif event.filled < event.volume:
-            logger.error("全成的委托，读取的数据不完整: %s -> %s", event.entrust_no, event.code)
-            helper_reset_event(event, True)
-            return 1  # 数据不完整，继续读取
-        else:
+        if event.filled > event.volume:
             logger.error("全成的委托，成交量大于委托量: %s -> %s", event.entrust_no, event.code)
             helper_reset_event(event, True)
             return -1  # 数据错误，结束尝试
+        elif event.filled == event.volume:
+            return 0
+        else:
+            logger.error("全成的委托，读取的数据不完整: %s -> %s", event.entrust_no, event.code)
+            return 1  # 数据不完整，继续读取，因为超时限制，可能这是本次循环最后一次读取
 
     if event.status == OrderStatus.PARTIAL_TX or event.status == OrderStatus.CANCELED:
         if event.filled > event.volume:
@@ -168,7 +167,7 @@ def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
             helper_reset_event(event, True)
             return -1  # 已经错误，不再继续执行
         elif event.volume == event.filled:
-            return 0  # 已经完成，不再继续执行
+            return 0  # 已经完成，不再继续执行，即使下次再查，数据也不会出错，只是状态纠正了
         else:
             return 1  # 数据可能不完整，可以继续尝试几次
 
@@ -275,17 +274,3 @@ def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action)
         timeout_in_action -= 200
 
     return exec_reports
-
-
-# 交易操作最后调用，状态2和3的情况，应该有数据，但是没读到
-def helper_keep_entrust_state(event: TradeEvent):
-    # force to reset event
-    helper_reset_event(event)
-
-    if event.status == OrderStatus.ALL_TX:
-        event.status = OrderStatus.PARTIAL_TX  # 下次再读
-    elif event.status == OrderStatus.CANCELED:  # 只有一种可能，过了15点
-        # 收盘后再查询时，会处理资金和股数退还，第二天9点核对账号时再检查数据一致性
-        event.status = OrderStatus.SUBMITTED
-
-    return event

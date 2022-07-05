@@ -20,7 +20,6 @@ from gmadaptor.gmclient.heper_functions import (
     helper_get_order_status_change_by_sidlist,
     helper_get_order_status_change_data,
     helper_init_trade_event,
-    helper_keep_entrust_state,
     helper_load_trade_event,
     helper_set_gm_order_side,
     helper_set_gm_order_type,
@@ -83,8 +82,10 @@ def wrapper_trade_operation(
     sid = csv_generate_order(
         account_id, myquant_code, volume, gm_order_side, gm_order_type, price
     )
+
     # sid = "ae129a25-38a2-48c6-84e6-acf1045e9a1c"
-    if sid is None:
+
+    if sid is None:  # 不可撤销的错误，判定为失败
         return {"status": 401, "msg": "failed to append data to order file"}
 
     params = {"timeout": timeout_in_action}
@@ -101,7 +102,7 @@ def wrapper_trade_operation(
     report = reports[0]
     timeout_in_action = params["timeout"]  # 下个操作的超时时间
     if timeout_in_action <= 0:
-        timeout_in_action = 100  # 恢复超时，至少读取一次执行汇报文件
+        timeout_in_action = 220  # 恢复超时，至少读取一次执行汇报文件
 
     # 读取状态变化文件中的委托信息后，准备读取执行汇报的详细成交记录
     # 掘金模拟盘返回12超期，东财保持已报的状态，如果返回12已过期，强行改成已撤
@@ -112,24 +113,27 @@ def wrapper_trade_operation(
     if status != 2 and status != 3 and status != 12:
         return {"status": 200, "msg": "success", "data": event.toDict()}
 
-    # 2和3的委托，再读取成交记录
+    # 2和3的委托（以及过期的委托），再读取成交记录
     exec_reports = helper_get_data_from_exec_reports(
         account_id, sid, event, timeout_in_action
     )
     if exec_reports is None or len(exec_reports) == 0:
-        # 如果客户端没启动成功，前面的状态变化文件读取时就会报错，这里直接返回
-        logger.error("failed to get exec report of entrust, %s, %s", account_id, sid)
-        newevent = helper_keep_entrust_state(event)
-        return {"status": 200, "msg": "success", "data": newevent.toDict()}
+        # 文件单一般不会出这样的错误，简单处理即可
+        if status == 3:  # 全成的委托回退一个状态，等待下次再取
+            event.status = OrderStatus.PARTIAL_TX
+        return {"status": 200, "msg": "success", "data": event.toDict()}
 
-    if event.invalid:  # 数据非法
+    if event.invalid:  # 数据非法，并且已经清零
         return {"status": 500, "msg": "entrust data invalid!"}
     else:
+        if status == 3 and event.filled != event.volume:
+            event.status = OrderStatus.PARTIAL_TX
         return {"status": 200, "msg": "success", "data": event.toDict()}
 
 
 def wrapper_cancel_entursts(account_id: str, sid_list):
-    # 构建撤销委托的数组
+    # 如果撤销操作失败，调用者得不到任何反馈，可以继续撤销，因此不用特殊处理各种异常情况
+
     if sid_list is None or (not isinstance(sid_list, list)):
         return {"status": 401, "msg": "only entrust list accepted"}
 
@@ -172,6 +176,8 @@ def wrapper_cancel_entursts(account_id: str, sid_list):
         if event.invalid:
             logger.error("cancel_entrusts, entrust data invalid, %s", event.entrust_no)
         else:
+            if event.status == OrderStatus.ALL_TX and event.filled != event.volume:
+                event.status = OrderStatus.PARTIAL_TX
             result_events[event.entrust_no] = event.toDict()
 
     return {"status": 200, "msg": "OK", "data": result_events}
@@ -207,6 +213,8 @@ def wrapper_get_today_all_entrusts(account_id: str):
         if event.invalid:
             logger.error("today_entrusts, invalid entrust: %s", event.entrust_no)
         else:
+            if event.status == OrderStatus.ALL_TX and event.filled != event.volume:
+                event.status = OrderStatus.PARTIAL_TX
             result_events[event.entrust_no] = event.toDict()
 
     return {"status": 200, "msg": "success", "data": result_events}
