@@ -3,7 +3,6 @@
 # @Time     : 2022-03-09 15:08
 import csv
 import logging
-from time import sleep
 
 from gmadaptor.common.types import OrderSide, OrderStatus, OrderType
 from gmadaptor.common.utils import stockcode_to_myquant
@@ -86,31 +85,37 @@ def wrapper_trade_operation(
     # sid = "ae129a25-38a2-48c6-84e6-acf1045e9a1c"
 
     if sid is None:  # 不可撤销的错误，判定为失败
-        return {"status": 401, "msg": "failed to append data to order file"}
+        return {"status": 501, "msg": "failed to append data to order file"}
 
+    # 读取状态变化文件，传递超时参数
     params = {"timeout": timeout_in_action}
-    # 读取状态变化文件，所有的委托状态均可查询，比如价格错误，股票错误等等
     reports = helper_get_order_status_change_data(account_id, sid, params)
-    if reports is None or len(reports) == 0:
+    if reports is None:  # 文件单输出模式启动失败，文件不存在
+        logger.error(
+            "order status change file not exist (file order service not ready), %s",
+            account_id,
+        )
+        return {"status": 501, "msg": "file order service not ready"}
+    if len(reports) == 0:  # 其他异常情况，保持委托状态
         logger.error("failed to get status change result, %s, %s", account_id, sid)
-        # 如果客户端重启失败导致读取不到数据，SID返回给调用者之后，需要手动恢复这些委托的执行
+        # 客户端异常导致读取不到数据，SID返回给调用者之后，需要手动恢复这些委托的执行
         tmp_event = helper_init_trade_event(
             security, price, volume, order_side, order_type, sid
         )
         return {"status": 200, "msg": "success", "data": tmp_event.toDict()}
 
-    report = reports[0]
     timeout_in_action = params["timeout"]  # 下个操作的超时时间
     if timeout_in_action <= 0:
-        timeout_in_action = 220  # 恢复超时，至少读取一次执行汇报文件
+        timeout_in_action = 220  # 重设超时，至少读取一次执行汇报文件
 
-    # 读取状态变化文件中的委托信息后，准备读取执行汇报的详细成交记录
+    # 准备读取执行汇报的详细成交记录
     # 掘金模拟盘返回12超期，东财保持已报的状态，如果返回12已过期，强行改成已撤
+    report = reports[0]
     event = helper_load_trade_event(report)
 
     # 状态不是（已成3，部成2）情况的委托，直接返回结果；12可能是1或者2导致的
     status = report.status
-    if status != 2 and status != 3 and status != 12:
+    if status not in (2, 3, 12):
         return {"status": 200, "msg": "success", "data": event.toDict()}
 
     # 2和3的委托（以及过期的委托），再读取成交记录
