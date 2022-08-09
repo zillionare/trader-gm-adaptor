@@ -31,7 +31,7 @@ class GMCash:
     # created_at: datetime.datetime  # 资金初始时间
     # updated_at: datetime.datetime  # 资金变更时间
     # recv_at: datetime.datetime  # 终端接收时间
-    # ord_frozen: float  # 冻结资金
+    ord_frozen: float  # 冻结资金
 
     def __init__(self, dict_data):
         self.account_id = dict_data["account_id"]
@@ -40,8 +40,9 @@ class GMCash:
         self.pnl = safe_float(dict_data["pnl"])
         self.fpnl = safe_float(dict_data["fpnl"])
         self.frozen = safe_float(dict_data["frozen"])
-        self.available = safe_float(dict_data["available"])
         self.balance = safe_float(dict_data["balance"])
+        self.available = safe_float(dict_data["available"])
+        self.ord_frozen = safe_float(dict_data["order_frozen(ord_frozen)"])
 
     def toDict(self):
         total = self.nav - self.pnl
@@ -54,9 +55,13 @@ class GMCash:
             "account": self.account_id,
             "available": math_round(self.available, 2),
             "pnl": math_round(self.pnl, 2),
-            "total": math_round(self.nav, 2),
+            "fpnl": math_round(self.fpnl, 2),
+            "nav": math_round(self.nav, 2),
+            "total": math_round(total, 2),
             "ppnl": _ppnl,
             "market_value": math_round(self.market_val, 2),
+            "balance": math_round(self.balance, 2),
+            "frozen": math_round(self.ord_frozen, 2),
         }
 
 
