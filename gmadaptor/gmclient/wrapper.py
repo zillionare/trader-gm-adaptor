@@ -79,12 +79,8 @@ def get_gm_out_csv_order_status_change(account_id: str):
         return None
 
 
-def get_gm_in_csv_order(account_id: str):
-    if account_id not in account_list.keys():
-        logger.warn("account id not found in account list: %s", account_id)
-        return None
-
-    home = account_list[account_id][1]
+def get_gm_in_csv_order(account_info: list):
+    home = account_info[1]
     if not path.exists(home):
         logger.error(
             "input folder for account %s not exist, please check your config file", home
@@ -96,12 +92,8 @@ def get_gm_in_csv_order(account_id: str):
     return path.normpath(path.join(home, csvfile))
 
 
-def get_gm_in_csv_cancelorder(account_id: str):
-    if account_id not in account_list.keys():
-        logger.warn("account id not found in account list: %s", account_id)
-        return None
-
-    home = account_list[account_id][1]
+def get_gm_in_csv_cancelorder(account_info: list):
+    home = account_info[1]
     if not path.exists(home):
         logger.error(
             "input folder for account %s not exist, please check your config file", home

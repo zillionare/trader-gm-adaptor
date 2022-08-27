@@ -8,7 +8,12 @@ import uuid
 from os import path
 from threading import Lock
 
+from gmadaptor.common.utils import stockcode_to_myquant
 from gmadaptor.gmclient.csvdata import GMExecReport, GMOrderReport
+from gmadaptor.gmclient.heper_functions import (
+    helper_set_gm_order_side,
+    helper_set_gm_order_type,
+)
 from gmadaptor.gmclient.types import GMOrderBiz, GMOrderType
 from gmadaptor.gmclient.wrapper import (
     get_gm_account_info,
@@ -22,20 +27,13 @@ logger = logging.getLogger(__name__)
 
 
 # -----------------------  generate order or cancel order -------------------------
-def csv_generate_order(
-    account_id: str,
-    symbol: str,
-    volume: int,
-    order_side: GMOrderBiz,
-    order_type: GMOrderType,
-    price: float = None,
-):
+def csv_generate_orders(account_id: str, trade_info_list: list):
     # get account information
     acct_info = get_gm_account_info(account_id)
     if acct_info is None:
         return None
 
-    in_file = get_gm_in_csv_order(account_id)
+    in_file = get_gm_in_csv_order(acct_info)
     if in_file is None:
         return None
 
@@ -47,11 +45,10 @@ def csv_generate_order(
         )
         return None
 
+    order_added = {}
+
     try:
         lock.acquire()
-
-        # get UUID and convert to string
-        sid = str(uuid.uuid4())
 
         add_head = False
         if not path.exists(in_file):
@@ -63,28 +60,39 @@ def csv_generate_order(
                     "sid,account_id,symbol,volume,order_type,order_business(order_biz),price,comment\n"
                 )
 
-            csvfile.write(
-                f"{sid},{account_id},{symbol},{volume},{order_type},{order_side},{price},\n"
-            )
+            for trade_info in trade_info_list:
+                security = trade_info["security"]
+                volume = trade_info["volume"]
+                price = trade_info["price"]
+                order_side = trade_info["order_side"]
+                order_type = trade_info["order_type"]
+                sid = trade_info["cid"]
+
+                _security = stockcode_to_myquant(security)
+                _order_type = helper_set_gm_order_type(order_type)
+                _order_side = helper_set_gm_order_side(order_side)
+
+                csvfile.write(
+                    f"{sid},{account_id},{_security},{volume},{_order_type},{_order_side},{price},\n"
+                )
+                order_added[sid] = trade_info
             # save to disk immediately
             csvfile.flush()
-
-        return sid
     except Exception as e:
         logger.warning("csv_generate_order: %s", e)
-        return None
-
     finally:
         lock.release()
 
+    return order_added
 
-def csv_generate_cancel_order(account_id: str, sid_list: list):
+
+def csv_generate_cancel_orders(account_id: str, sid_list: list):
     # get account information
     acct_info = get_gm_account_info(account_id)
     if acct_info is None:
         return -1
 
-    in_file = get_gm_in_csv_cancelorder(account_id)
+    in_file = get_gm_in_csv_cancelorder(acct_info)
     if in_file is None:
         return -1
 
@@ -93,6 +101,8 @@ def csv_generate_cancel_order(account_id: str, sid_list: list):
     if lock is None:
         logger.error("lock object for this account not found: %s", account_id)
         return -1
+
+    order_added = []
 
     try:
         lock.acquire()
@@ -107,18 +117,19 @@ def csv_generate_cancel_order(account_id: str, sid_list: list):
 
             for sid in sid_list:
                 csvfile.write(f"{sid},comments,\n")
+                order_added.append(sid)
             # save to disk immediately
             csvfile.flush()
-
-        return 0
     except Exception as e:
         logger.warning("csv_generate_order: %s", e)
-        return -1
     finally:
         lock.release()
 
+    return order_added
+
 
 # ------------------  generate order or cancel order ------ end ----------------
+
 
 # 从执行回报中获取数据，如果sid_list非空，则过滤结果
 def csv_get_exec_report_data(account_id: str, sid_list: list):
@@ -127,57 +138,27 @@ def csv_get_exec_report_data(account_id: str, sid_list: list):
         logger.error("execution report file not found: %s", exec_rpt_file)
         return None
 
-    reports = []
+    reports = {}
     with open(exec_rpt_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
             report = GMExecReport(row)
             if report.exec_type != 15:  # 15成交，19执行有异常
                 continue
             # 跳过异常数据后，只保留有效数据
-            if sid_list is None:
-                reports.append(report)
-            elif report.sid in sid_list:
-                reports.append(report)
-
-    logger.debug("total reports read in exec report file: %d", len(reports))
-    return reports
-
-
-# 读取执行回报中的数据，根据目前观察到的结果，此文件只有15状态的数据
-def csv_get_exec_report_data_by_sid(rpt_file: str, sid: str):
-    reports = []
-    with open(rpt_file, "r", encoding="utf-8-sig") as csvfile:
-        for row in csv.DictReader(csvfile):
-            report = GMExecReport(row)
-            if report.exec_type != 15:  # ExecType_Trade = 15 # 成交(有效)
+            if not sid_list:
+                if report.sid in reports:
+                    reports[report.sid].append(report)
+                else:
+                    reports[report.sid] = [report]
                 continue
-            # 跳过异常数据后，只保留有效数据
-            if sid == report.sid:
-                reports.append(report)
+
+            if report.sid in sid_list:
+                if report.sid in reports:
+                    reports[report.sid].append(report)
+                else:
+                    reports[report.sid] = [report]
 
     return reports
-
-
-def csv_get_order_status_change_data_by_sid(status_file: str, sid: str):
-    result_report = None
-    with open(status_file, "r", encoding="utf-8-sig") as csvfile:
-        for row in csv.DictReader(csvfile):
-            report = GMOrderReport(row)
-            # 每次遍历所有数据，最后的总是最新的
-            if sid == report.sid:
-                result_report = report
-
-    # retry next time until timeout
-    if result_report is None:  # not found
-        return {"result": -1}
-
-    status = report.status
-    # 执行完毕状态: 3已成, 5, 已撤, 8已拒, 9挂起, 12已过期
-    if status == 3 or status == 5 or status == 8 or status == 9 or status == 12:
-        return {"result": 0, "report": result_report}
-    else:
-        # need retry: 2部成, 10待报, 1已报，6待撤
-        return {"result": 1, "report": result_report}
 
 
 def csv_get_order_status_change_data_by_sidlist(status_file: str, sidlist: list):
@@ -196,11 +177,8 @@ def csv_get_order_status_change_data_by_sidlist(status_file: str, sidlist: list)
     # 任何一个委托状态不确定时，返回结果等待下一次查询
     for sid in result_reports.keys():
         report = result_reports[sid]
-        status = report.status
         # 执行完毕状态: 3已成, 5, 已撤, 8已拒, 9挂起, 12已过期
-        if status == 3 or status == 5 or status == 8 or status == 9 or status == 12:
-            pass
-        else:
+        if report.status not in (3, 5, 8, 9, 12):
             # need retry: 2部成, 10待报, 1已报，6待撤
             return {"result": 1, "reports": result_reports}
 
@@ -232,37 +210,4 @@ def csv_get_order_status(account_id: str):
                 orders.append(order)
 
     logger.debug("total orders read: %d", len(orders))
-    return orders
-
-
-# ------------------------ 开发用途 ------------------------------
-def csv_get_unfinished_entrusts_from_order_status(account_id: str):
-    order_status_file = get_gm_out_csv_orderstatus(account_id)
-    if not path.exists(order_status_file):
-        logger.error("execution report file not found: %s", order_status_file)
-        return None
-
-    orders = []
-    today = datetime.datetime.now()
-    with open(order_status_file, "r", encoding="utf-8-sig") as csvfile:
-        for row in csv.DictReader(csvfile):
-            order = GMOrderReport(row)
-            ot = order.created_at
-            if (
-                ot.year == today.year
-                and ot.month == today.month
-                and ot.day == today.day
-            ):
-                if (
-                    order.status != 3  # 已成
-                    and order.status != 5  # 已撤
-                    and order.status != 8  # 已拒绝
-                    and order.status != 12  # 已过期
-                ):
-                    logger.debug(
-                        f"read order status of today: {order.sid} -> {order.cl_ord_id}, status: {order.status}"
-                    )
-                    orders.append(order)
-
-    logger.debug("unfinished entrust from order stauts file: %d", len(orders))
     return orders

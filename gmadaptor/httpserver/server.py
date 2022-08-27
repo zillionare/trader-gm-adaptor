@@ -5,7 +5,7 @@ import logging
 
 from sanic import Sanic
 
-from gmadaptor.httpserver.route_map import initialize_blueprint
+from gmadaptor.httpserver.webapi import initialize_blueprint
 
 logger = logging.getLogger(__name__)
 

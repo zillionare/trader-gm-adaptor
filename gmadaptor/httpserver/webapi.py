@@ -73,25 +73,27 @@ async def bp_mock_buy(request):
     price = request.json.get("price")
     volume = int(request.json.get("volume"))
     timeout = request.json.get("timeout")
+    sid = request.json.get("cid", None)  # 关键参数
     timeout_in_ms = calculate_timeout_in_ms(timeout, 2, 5)
     logger.info(
         f"buy: code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
     )
 
-    if symbol is None or price is None or volume is None:
+    if symbol is None or price is None or volume is None or sid is None:
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
 
-    result = handler.wrapper_trade_operation(
-        account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.BUY,
-        OrderType.LIMIT,
-        0,
-        timeout_in_ms,
-    )
+    trade_info = {
+        "security": symbol,
+        "volume": volume,
+        "price": price,
+        "order_side": OrderSide.BUY,
+        "order_type": OrderType.MARKET,
+        "cid": sid,
+        "limit_price": 0,
+    }
+
+    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"buy result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -107,7 +109,8 @@ async def bp_mock_market_buy(request):
     account_id = request.headers.get("Account-ID")
     symbol = request.json.get("security")
     volume = int(request.json.get("volume"))
-    if symbol is None or volume is None:
+    sid = request.json.get("cid", None)  # 关键参数
+    if symbol is None or volume is None or sid is None:
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
 
@@ -125,16 +128,17 @@ async def bp_mock_market_buy(request):
         f"market_buy: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
     )
 
-    result = handler.wrapper_trade_operation(
-        account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.BUY,
-        OrderType.MARKET,
-        limit_price,
-        timeout_in_ms,
-    )
+    trade_info = {
+        "security": symbol,
+        "volume": volume,
+        "price": price,
+        "order_side": OrderSide.BUY,
+        "order_type": OrderType.MARKET,
+        "cid": sid,
+        "limit_price": limit_price,
+    }
+
+    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"market_buy result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -151,7 +155,8 @@ async def bp_mock_sell(request):
     symbol = request.json.get("security")
     price = request.json.get("price")
     volume = int(request.json.get("volume"))
-    if symbol is None or price is None or volume is None:
+    sid = request.json.get("cid", None)  # 关键参数
+    if symbol is None or price is None or volume is None or sid is None:
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
 
@@ -161,16 +166,16 @@ async def bp_mock_sell(request):
         f"sell: code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
     )
 
-    result = handler.wrapper_trade_operation(
-        account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.SELL,
-        OrderType.LIMIT,
-        0,
-        timeout_in_ms,
-    )
+    trade_info = {
+        "security": symbol,
+        "volume": volume,
+        "price": price,
+        "order_side": OrderSide.SELL,
+        "order_type": OrderType.LIMIT,
+        "cid": sid,
+        "limit_price": 0,
+    }
+    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"sell result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -186,7 +191,8 @@ async def bp_mock_market_sell(request):
     account_id = request.headers.get("Account-ID")
     symbol = request.json.get("security")
     volume = int(request.json.get("volume"))
-    if symbol is None or volume is None:
+    sid = request.json.get("cid", None)  # 关键参数
+    if symbol is None or volume is None or sid is None:
         logger.info("parameter is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
 
@@ -203,16 +209,41 @@ async def bp_mock_market_sell(request):
         f"market_sell: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
     )
 
-    result = handler.wrapper_trade_operation(
-        account_id,
-        symbol,
-        volume,
-        price,
-        OrderSide.SELL,
-        OrderType.MARKET,
-        limit_price,
-        timeout_in_ms,
-    )
+    trade_info = {
+        "security": symbol,
+        "volume": volume,
+        "price": price,
+        "order_side": OrderSide.SELL,
+        "order_type": OrderType.MARKET,
+        "cid": sid,
+        "limit_price": 0,
+    }
+    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
+    if result["status"] != 200:
+        logger.info(f"market_sell result: {result['msg']}")
+        return response.json(make_response(-1, result["msg"]))
+
+    # we can check result.status if this entrust success
+    data = result["data"]
+    logger.info(f"market_sell result: \n{data}")
+    return response.json(make_response(0, "OK", data))
+
+
+@bp_gm_adaptor.route("/batch_sell", methods=["POST"])
+async def bp_mock_batch_sell(request):
+    account_id = request.headers.get("Account-ID")
+
+    sell_info_list = request.json.get("sec_list", None)
+    if not sell_info_list:
+        logger.info("sell info list is empty: %s", account_id)
+        return response.json(make_response(-1, "parameter cannot be empty"))
+
+    timeout = request.json.get("timeout")
+    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+
+    logger.info(f"batch_sell: timeout->{timeout_in_ms}, info list->{sell_info_list}")
+
+    result = handler.wrapper_trade_action(account_id, sell_info_list, timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"market_sell result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -282,12 +313,7 @@ async def bp_mock_cancel_entrusts(request):
 
 @bp_gm_adaptor.route("/today_entrusts", methods=["POST"])
 async def bp_mock_get_today_entrusts(request):
-    """查询今天委托情况，可传入需要查询的委托号码清单
-    1. 从order_status文件查询委托状态，以此为基础，如果未出现在此文件中，暂定委托没有发送成功，等下次查询
-    2. 再从execution_report文件查询执行情况，如果委托不在order_status文件，扔弃，待下次查询
-    3. 执行报告中的委托数量和成交数量，在已成的情况下，必须完全一致
-    4. order_status是整文件刷新，因此时效性应该比exec_report差，如果前一个文件中，委托是完结状态，那么执行回报中应该有完整的数据
-    """
+    """查询今天委托情况，可传入需要查询的委托号码清单"""
     account_id = request.headers.get("Account-ID")
 
     entrust_list = []
@@ -326,33 +352,6 @@ async def bp_mock_get_today_entrusts(request):
             "today_entrusts result: no results found, datalist: %d", len(datalist)
         )
     return response.json(make_response(0, "OK", return_list))
-
-
-# ----------------------- 文件单内部测试使用 -------------------------------
-
-
-@bp_gm_adaptor.route("/today_unfinished_entrusts", methods=["POST"])
-async def bp_mock_cancel_all_entrusts(request):
-    account_id = request.headers.get("Account-ID")
-
-    logger.info("today_unfinished_entrusts, account_id: %s", account_id)
-
-    result = handler.wrapper_get_unfinished_entursts(account_id)
-    if result["status"] != 200:
-        return response.json(make_response(-1, result["msg"]))
-    return response.json(make_response(0, "OK", result["data"]))
-
-
-@bp_gm_adaptor.route("/today_trades", methods=["POST"])
-async def bp_mock_get_today_trades(request):
-    account_id = request.headers.get("Account-ID")
-
-    result = handler.wrapper_get_today_trades(account_id)
-    if result["status"] != 200:
-        return response.json(make_response(-1, result["msg"]))
-
-    order_list = result["data"]
-    return response.json(make_response(0, "OK", order_list))
 
 
 def initialize_blueprint(app: Sanic):

@@ -4,27 +4,28 @@ from os import path
 from time import sleep
 
 import cfg4py
+
 from gmadaptor.common.types import OrderSide, OrderStatus, OrderType, TradeEvent
 from gmadaptor.common.utils import math_round, stockcode_to_joinquant
-from gmadaptor.gmclient.csv_utils import (
-    csv_get_exec_report_data_by_sid,
-    csv_get_order_status_change_data_by_sid,
-    csv_get_order_status_change_data_by_sidlist,
-)
+from gmadaptor.gmclient.csv_utils import csv_get_order_status_change_data_by_sidlist
 from gmadaptor.gmclient.csvdata import GMOrderReport
 from gmadaptor.gmclient.types import GMOrderBiz, GMOrderType
-from gmadaptor.gmclient.wrapper import (
-    get_gm_out_csv_execreport,
-    get_gm_out_csv_order_status_change,
-)
+from gmadaptor.gmclient.wrapper import get_gm_out_csv_order_status_change
 
 logger = logging.getLogger(__name__)
 
 
-def helper_init_trade_event(code, price, volume, order_side, order_type, sid):
-    # 如果从状态变化文件读取不到数据，返回下面的默认值
+def helper_init_trade_event(trade_info: dict) -> TradeEvent:
+    """如果从状态变化文件读取不到数据，返回下面的默认值"""
+    security = trade_info["security"]
+    volume = trade_info["volume"]
+    price = trade_info["price"]
+    order_side = trade_info["order_side"]
+    order_type = trade_info["order_type"]
+    sid = trade_info["cid"]
+
     event = TradeEvent(
-        code,  # z trade server传过来的代码，已经按照聚宽格式化
+        security,  # z trade server传过来的代码，已经按照聚宽格式化
         price,  # 委托价格
         volume,
         order_side,
@@ -39,6 +40,7 @@ def helper_init_trade_event(code, price, volume, order_side, order_type, sid):
         "",  # reject detail
         datetime.datetime.now(),  # recv at
     )
+
     return event
 
 
@@ -116,19 +118,18 @@ def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
     recv_at = None  # 最后完成交易的时间
 
     for exec_rpt in exec_reports:  # 从执行回报中取详细数据
-        if exec_rpt.sid == event.entrust_no:
-            total_volume += exec_rpt.volume
-            # 价格从CSV读取时已四舍五入，对金额再次四舍五入
-            amount = math_round(exec_rpt.volume * exec_rpt.price, 2)
-            total_amount += amount
-            total_commission += helper_calculate_trade_fees(
-                is_shex,
-                amount,
-                trade_fees_info,
-                exec_rpt.order_side,
-                is_sim,
-            )
-            recv_at = exec_rpt.recv_at
+        total_volume += exec_rpt.volume
+        # 价格从CSV读取时已四舍五入，对金额再次四舍五入
+        amount = math_round(exec_rpt.volume * exec_rpt.price, 2)
+        total_amount += amount
+        total_commission += helper_calculate_trade_fees(
+            is_shex,
+            amount,
+            trade_fees_info,
+            exec_rpt.order_side,
+            is_sim,
+        )
+        recv_at = exec_rpt.recv_at
 
     if not is_sim:  # 实盘针对委托计算佣金
         commission = helper_calculate_trade_fees_for_real(total_amount, trade_fees_info)
@@ -203,74 +204,32 @@ def helper_set_gm_order_type(order_type):
 
 # 从status change file中读取订单状态变化数据
 # 交易不一定顺利执行完毕，因此需要在超时后判断是否完成交易
-def helper_get_order_status_change_data(account_id, sid, params):
+def helper_get_order_status_changes(account_id: str, sid_list: list, timeout: int):
     status_file = get_gm_out_csv_order_status_change(account_id)
     if not path.exists(status_file):
-        logger.error("order status change file not found: %s", status_file)
+        logger.error(
+            "order status change file not found (file order service not ready): %s",
+            status_file,
+        )
         return None
-
-    reports = []  # 定义成空值，避免和None冲突
-    timeout_in_action = params["timeout"]  # 毫秒
-    while timeout_in_action > 0:
-        reports.clear()  # 清空列表
-        result = csv_get_order_status_change_data_by_sid(status_file, sid)
-        result_status = result["result"]
-        if result_status != -1:  # 保存查询到的结果，继续查看，-1代表未查询到结果
-            reports.append(result["report"])
-
-        if result_status == 0:  # 完结状态直接退出循环
-            break
-
-        sleep(200 / 1000)
-        timeout_in_action -= 200
-        params["timeout"] = timeout_in_action  # 保存剩下的超时计数
-
-    return reports
-
-
-# 此函数给cancel_entrust(s)使用，用来读取委托撤销的结果
-def helper_get_order_status_change_by_sidlist(account_id, sid_list):
-    status_file = get_gm_out_csv_order_status_change(account_id)
-    if not path.exists(status_file):
-        logger.error("order status change file not found: %s", status_file)
-        return None
-
-    # 默认等待2000毫秒
-    timeout_in_action = 2000
 
     reports = {}  # 定义成空值，避免和None冲突
-    while timeout_in_action > 0:
+    while timeout > 0:
         result = csv_get_order_status_change_data_by_sidlist(status_file, sid_list)
         result_status = result["result"]
-        if result_status != -1:  # 保存查询到的结果
+        if result_status != -1:  # 有任何结果先保存(-1表示没查到结果)
             reports = result["reports"]
 
         if result_status == 0:  # 获取完结状态的信息
             break
 
         sleep(200 / 1000)
-        timeout_in_action -= 200
+        timeout -= 200
 
+    if not reports:
+        logger.error(
+            "failed to get status change result (no results), %s, %s",
+            account_id,
+            sid_list,
+        )
     return reports
-
-
-# 从执行回报文件中读取状态的详细信息，唯一调用者：wrapper_trade_operation
-def helper_get_data_from_exec_reports(account_id, sid, event, timeout_in_action):
-    rpt_file = get_gm_out_csv_execreport(account_id)
-    if not path.exists(rpt_file):
-        logger.error("execution report file not found: %s", rpt_file)
-        return None
-
-    exec_reports = []  # 定义成空值，避免和None冲突
-    while timeout_in_action > 0:
-        helper_reset_event(event)  # 每次循环前，清除交易信息
-        exec_reports = csv_get_exec_report_data_by_sid(rpt_file, sid)
-        if len(exec_reports) > 0:  # 收集到了至少一条数据
-            rc = helper_sum_exec_reports_by_sid(exec_reports, event)
-            if rc == 0 or rc == -1:
-                break
-
-        sleep(200 / 1000)
-        timeout_in_action -= 200
-
-    return exec_reports
