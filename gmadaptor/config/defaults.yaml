@@ -1,8 +1,8 @@
 ﻿log_level: DEBUG
 
 server_info:
-    ip: 192.168.1.201
-    port: 9002
+    ip: 192.168.100.201
+    port: 9000
     access_token : "84ae0899-7a8d-44ff-9983-4fa7cbbc424b"
 
 gm_info:

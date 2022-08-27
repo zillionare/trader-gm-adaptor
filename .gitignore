@@ -106,3 +106,5 @@ ENV/
 
 # mkdocs build dir
 site/
+
+logs/

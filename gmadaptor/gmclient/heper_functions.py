@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 from os import path
@@ -9,7 +10,6 @@ from gmadaptor.common.types import OrderSide, OrderStatus, OrderType, TradeEvent
 from gmadaptor.common.utils import math_round, stockcode_to_joinquant
 from gmadaptor.gmclient.csv_utils import csv_get_order_status_change_data_by_sidlist
 from gmadaptor.gmclient.csvdata import GMOrderReport
-from gmadaptor.gmclient.types import GMOrderBiz, GMOrderType
 from gmadaptor.gmclient.wrapper import get_gm_out_csv_order_status_change
 
 logger = logging.getLogger(__name__)
@@ -188,23 +188,11 @@ def helper_reset_event(event, invalid=False):
     event.invalid = invalid  # 标记是否为无效数据
 
 
-def helper_set_gm_order_side(order_side):
-    if order_side == OrderSide.SELL:
-        return GMOrderBiz.SELL
-    else:
-        return GMOrderBiz.BUY
-
-
-def helper_set_gm_order_type(order_type):
-    # 市价成交，无须价格，除非是限价委托（即时成交，剩余转限价）
-    if order_type == OrderType.MARKET:
-        return GMOrderType.BESTCANCEL
-    return GMOrderType.LIMITPRICE
-
-
 # 从status change file中读取订单状态变化数据
 # 交易不一定顺利执行完毕，因此需要在超时后判断是否完成交易
-def helper_get_order_status_changes(account_id: str, sid_list: list, timeout: int):
+async def helper_get_order_status_changes(
+    account_id: str, sid_list: list, timeout: int
+):
     status_file = get_gm_out_csv_order_status_change(account_id)
     if not path.exists(status_file):
         logger.error(
@@ -215,7 +203,9 @@ def helper_get_order_status_changes(account_id: str, sid_list: list, timeout: in
 
     reports = {}  # 定义成空值，避免和None冲突
     while timeout > 0:
-        result = csv_get_order_status_change_data_by_sidlist(status_file, sid_list)
+        result = await csv_get_order_status_change_data_by_sidlist(
+            status_file, sid_list
+        )
         result_status = result["result"]
         if result_status != -1:  # 有任何结果先保存(-1表示没查到结果)
             reports = result["reports"]
@@ -223,7 +213,7 @@ def helper_get_order_status_changes(account_id: str, sid_list: list, timeout: in
         if result_status == 0:  # 获取完结状态的信息
             break
 
-        sleep(200 / 1000)
+        asyncio.sleep(200 / 1000)
         timeout -= 200
 
     if not reports:

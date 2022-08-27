@@ -10,11 +10,7 @@ from threading import Lock
 
 from gmadaptor.common.utils import stockcode_to_myquant
 from gmadaptor.gmclient.csvdata import GMExecReport, GMOrderReport
-from gmadaptor.gmclient.heper_functions import (
-    helper_set_gm_order_side,
-    helper_set_gm_order_type,
-)
-from gmadaptor.gmclient.types import GMOrderBiz, GMOrderType
+from gmadaptor.gmclient.types import get_gm_order_side, get_gm_order_type
 from gmadaptor.gmclient.wrapper import (
     get_gm_account_info,
     get_gm_in_csv_cancelorder,
@@ -27,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 # -----------------------  generate order or cancel order -------------------------
-def csv_generate_orders(account_id: str, trade_info_list: list):
+async def csv_generate_orders(account_id: str, trade_info_list: list):
     # get account information
     acct_info = get_gm_account_info(account_id)
     if acct_info is None:
@@ -69,8 +65,8 @@ def csv_generate_orders(account_id: str, trade_info_list: list):
                 sid = trade_info["cid"]
 
                 _security = stockcode_to_myquant(security)
-                _order_type = helper_set_gm_order_type(order_type)
-                _order_side = helper_set_gm_order_side(order_side)
+                _order_type = get_gm_order_type(order_type)
+                _order_side = get_gm_order_side(order_side)
 
                 csvfile.write(
                     f"{sid},{account_id},{_security},{volume},{_order_type},{_order_side},{price},\n"
@@ -86,7 +82,7 @@ def csv_generate_orders(account_id: str, trade_info_list: list):
     return order_added
 
 
-def csv_generate_cancel_orders(account_id: str, sid_list: list):
+async def csv_generate_cancel_orders(account_id: str, sid_list: list):
     # get account information
     acct_info = get_gm_account_info(account_id)
     if acct_info is None:
@@ -132,7 +128,7 @@ def csv_generate_cancel_orders(account_id: str, sid_list: list):
 
 
 # 从执行回报中获取数据，如果sid_list非空，则过滤结果
-def csv_get_exec_report_data(account_id: str, sid_list: list):
+async def csv_get_exec_report_data(account_id: str, sid_list: list):
     exec_rpt_file = get_gm_out_csv_execreport(account_id)
     if not path.exists(exec_rpt_file):
         logger.error("execution report file not found: %s", exec_rpt_file)
@@ -161,7 +157,7 @@ def csv_get_exec_report_data(account_id: str, sid_list: list):
     return reports
 
 
-def csv_get_order_status_change_data_by_sidlist(status_file: str, sidlist: list):
+async def csv_get_order_status_change_data_by_sidlist(status_file: str, sidlist: list):
     result_reports = {}
     with open(status_file, "r", encoding="utf-8-sig") as csvfile:
         for row in csv.DictReader(csvfile):
@@ -185,7 +181,7 @@ def csv_get_order_status_change_data_by_sidlist(status_file: str, sidlist: list)
     return {"result": 0, "reports": result_reports}
 
 
-def csv_get_order_status(account_id: str):
+async def csv_get_order_status(account_id: str):
     # 取出所有日内委托数据
     order_status_file = get_gm_out_csv_orderstatus(account_id)
     if not path.exists(order_status_file):

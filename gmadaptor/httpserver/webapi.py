@@ -41,7 +41,7 @@ async def bp_mock_get_balance(request):
     account_id = request.headers.get("Account-ID")
     logger.info(f"balance: account->{account_id}")
 
-    result = handler.wrapper_get_balance(account_id)
+    result = await handler.wrapper_get_balance(account_id)
     if result["status"] != 200:
         logger.info(f"balance result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -56,7 +56,7 @@ async def bp_mock_get_positions(request):
     account_id = request.headers.get("Account-ID")
     logger.info(f"positions: account->{account_id}")
 
-    result = handler.wrapper_get_positions(account_id)
+    result = await handler.wrapper_get_positions(account_id)
     if result["status"] != 200:
         logger.info(f"positions result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -93,7 +93,7 @@ async def bp_mock_buy(request):
         "limit_price": 0,
     }
 
-    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
+    result = await handler.wrapper_trade_action(account_id, [trade_info], timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"buy result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -138,7 +138,7 @@ async def bp_mock_market_buy(request):
         "limit_price": limit_price,
     }
 
-    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
+    result = await handler.wrapper_trade_action(account_id, [trade_info], timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"market_buy result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -175,7 +175,7 @@ async def bp_mock_sell(request):
         "cid": sid,
         "limit_price": 0,
     }
-    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
+    result = await handler.wrapper_trade_action(account_id, [trade_info], timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"sell result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -218,7 +218,7 @@ async def bp_mock_market_sell(request):
         "cid": sid,
         "limit_price": 0,
     }
-    result = handler.wrapper_trade_action(account_id, trade_info, timeout_in_ms)
+    result = await handler.wrapper_trade_action(account_id, [trade_info], timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"market_sell result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -237,13 +237,18 @@ async def bp_mock_batch_sell(request):
     if not sell_info_list:
         logger.info("sell info list is empty: %s", account_id)
         return response.json(make_response(-1, "parameter cannot be empty"))
+    if not isinstance(sell_info_list, list):
+        logger.info("sell info list must be array: %s", account_id)
+        return response.json(make_response(-1, "parameter is not array-like"))
 
     timeout = request.json.get("timeout")
     timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
 
     logger.info(f"batch_sell: timeout->{timeout_in_ms}, info list->{sell_info_list}")
 
-    result = handler.wrapper_trade_action(account_id, sell_info_list, timeout_in_ms)
+    result = await handler.wrapper_trade_action(
+        account_id, sell_info_list, timeout_in_ms
+    )
     if result["status"] != 200:
         logger.info(f"market_sell result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -266,7 +271,7 @@ async def bp_mock_cancel_entrust(request):
         logger.info("cancel_entrust: only 1 entrust ID list accepted")
         return response.json(make_response(400, "only 1 entrust ID list accepted"))
 
-    result = handler.wrapper_cancel_entursts(account_id, [sid])
+    result = await handler.wrapper_cancel_entursts(account_id, [sid])
     if result["status"] != 200:
         logger.info(f"cancel_entrust result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -296,7 +301,7 @@ async def bp_mock_cancel_entrusts(request):
         logger.info("cancel_entrusts: no entrust ID list provided")
         return response.json(make_response(400, "no entrust ID list provided"))
 
-    result = handler.wrapper_cancel_entursts(account_id, sid_list)
+    result = await handler.wrapper_cancel_entursts(account_id, sid_list)
     if result["status"] != 200:
         logger.info(f"cancel_entrust result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -330,7 +335,7 @@ async def bp_mock_get_today_entrusts(request):
     else:
         logger.info("today_entrusts: account->%s, query all entrusts", account_id)
 
-    result = handler.wrapper_get_today_all_entrusts(account_id)
+    result = await handler.wrapper_get_today_all_entrusts(account_id)
     if result["status"] != 200:
         logger.info(f"today_entrusts result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))

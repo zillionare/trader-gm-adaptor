@@ -2,23 +2,23 @@
 # @Author   : henry
 # @Time     : 2022-03-09 15:08
 
-import uuid
 from enum import IntEnum
 
+from gmadaptor.common.types import OrderSide, OrderType
 
 """order_biz 委托业务类型
 股票
-    1	股票, 买入
-    2	股票, 卖出
+    1    股票, 买入
+    2    股票, 卖出
 期货
-    10	期货, 买入开仓
-    11	期货, 卖出平仓
-    12	期货, 卖出平仓, 平今仓 (上海商品期货交易所 only)
-    13	期货, 卖出平仓, 平昨仓 (上海商品期货交易所 only)
-    14	期货, 卖出开仓
-    15	期货, 买入平仓
-    16	期货, 买入平仓，平今仓 (上海商品期货交易所 only)
-    17	期货, 买入平仓, 平昨仓 (上海商品期货交易所 only)
+    10    期货, 买入开仓
+    11    期货, 卖出平仓
+    12    期货, 卖出平仓, 平今仓 (上海商品期货交易所 only)
+    13    期货, 卖出平仓, 平昨仓 (上海商品期货交易所 only)
+    14    期货, 卖出开仓
+    15    期货, 买入平仓
+    16    期货, 买入平仓，平今仓 (上海商品期货交易所 only)
+    17    期货, 买入平仓, 平昨仓 (上海商品期货交易所 only)
 """
 
 
@@ -30,16 +30,16 @@ class GMOrderBiz(IntEnum):
 """
 order_type 委托类型
 深圳市场
-    1	限价
-    20	市价, 对方最优价格 (best of counterparty)
-    21	市价, 己方最优价格 (best of party)
-    22	市价, 即时成交剩余撤销 (fill and kill)
-    23	市价, 即时全额成交或撤销 (fill or kill)
-    24	市价, 最优五档剩余撤销 (best 5 then cancel)
+    1    限价
+    20    市价, 对方最优价格 (best of counterparty)
+    21    市价, 己方最优价格 (best of party)
+    22    市价, 即时成交剩余撤销 (fill and kill)
+    23    市价, 即时全额成交或撤销 (fill or kill)
+    24    市价, 最优五档剩余撤销 (best 5 then cancel)
 上海市场
-    1	限价
-    24	市价, 最优五档剩余撤销 (best 5 then cancel)
-    25	市价, 最优五档剩余转限价(best 5 then limit)
+    1    限价
+    24    市价, 最优五档剩余撤销 (best 5 then cancel)
+    25    市价, 最优五档剩余转限价(best 5 then limit)
 """
 
 
@@ -105,3 +105,17 @@ class GMOrderStatus(IntEnum):
     SUSPENDED = 9
     PENDINGNEW = 10
     EXPIRED = 12
+
+
+def get_gm_order_side(order_side):
+    if order_side == OrderSide.SELL:
+        return GMOrderBiz.SELL
+    else:
+        return GMOrderBiz.BUY
+
+
+def get_gm_order_type(order_type):
+    # 市价成交，无须价格，除非是限价委托（即时成交，剩余转限价）
+    if order_type == OrderType.MARKET:
+        return GMOrderType.BESTCANCEL
+    return GMOrderType.LIMITPRICE

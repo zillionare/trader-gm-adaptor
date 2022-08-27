@@ -8,7 +8,6 @@ from os import path
 from threading import Lock
 
 import cfg4py
-from cfg4py.config import Config
 
 logger = logging.getLogger(__name__)
 
