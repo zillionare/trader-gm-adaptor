@@ -213,7 +213,7 @@ async def helper_get_order_status_changes(
         if result_status == 0:  # 获取完结状态的信息
             break
 
-        asyncio.sleep(200 / 1000)
+        await asyncio.sleep(200 / 1000)
         timeout -= 200
 
     if not reports:
