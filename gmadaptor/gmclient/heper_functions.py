@@ -153,13 +153,13 @@ def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
     if event.status == OrderStatus.ALL_TX:
         # 已完成的委托，但是成交数据不全，清除掉汇总数据，避免出错
         if event.filled > event.volume:
-            logger.error("全成的委托，成交量大于委托量: %s -> %s", event.entrust_no, event.code)
+            logger.error("全成的委托，成交量大于委托量：%s -> %s", event.entrust_no, event.code)
             helper_reset_event(event, True)
             return -1  # 数据错误，结束尝试
         elif event.filled == event.volume:
             return 0
         else:
-            logger.error("全成的委托，读取的数据不完整: %s -> %s", event.entrust_no, event.code)
+            logger.error("全成的委托，读取的数据不完整：%s -> %s", event.entrust_no, event.code)
             return 1  # 数据不完整，继续读取，因为超时限制，可能这是本次循环最后一次读取
 
     if event.status == OrderStatus.PARTIAL_TX or event.status == OrderStatus.CANCELED:
@@ -173,9 +173,15 @@ def helper_sum_exec_reports_by_sid(exec_reports, event: TradeEvent):
             return 1  # 数据可能不完整，可以继续尝试几次
 
     if event.filled != 0:
-        return -1
+        logger.error(
+            "非成交的委托成交量不为0：%s -> %s, status: %d",
+            event.entrust_no,
+            event.code,
+            event.status,
+        )
+        return -1  # 服务器不处理此类委托的成交信息
     else:
-        return 0  # 其他情况不继续处理了
+        return 0
 
 
 # 循环读取执行回报之前，清除掉交易信息
