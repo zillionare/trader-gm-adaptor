@@ -99,8 +99,9 @@ async def bp_mock_buy(request):
         return response.json(make_response(-1, result["msg"]))
 
     data = result["data"]
-    logger.info(f"buy result: \n{data}")
-    return response.json(make_response(0, "OK", data))
+    item = data.get(sid, {})
+    logger.info(f"buy result: \n{item}")
+    return response.json(make_response(0, "OK", item))
 
 
 @bp_gm_adaptor.route("/market_buy", methods=["POST"])
@@ -145,8 +146,9 @@ async def bp_mock_market_buy(request):
 
     # we can check result.status if this entrust success
     data = result["data"]
-    logger.info(f"market_buy result: \n{data}")
-    return response.json(make_response(0, "OK", data))
+    item = data.get(sid, {})
+    logger.info(f"market_buy result: \n{item}")
+    return response.json(make_response(0, "OK", item))
 
 
 @bp_gm_adaptor.route("/sell", methods=["POST"])
@@ -182,8 +184,9 @@ async def bp_mock_sell(request):
 
     # we can check result.status if this entrust success
     data = result["data"]
-    logger.info(f"sell result: \n{data}")
-    return response.json(make_response(0, "OK", data))
+    item = data.get(sid, {})
+    logger.info(f"sell result: \n{item}")
+    return response.json(make_response(0, "OK", item))
 
 
 @bp_gm_adaptor.route("/market_sell", methods=["POST"])
@@ -225,8 +228,9 @@ async def bp_mock_market_sell(request):
 
     # we can check result.status if this entrust success
     data = result["data"]
-    logger.info(f"market_sell result: \n{data}")
-    return response.json(make_response(0, "OK", data))
+    item = data.get(sid, {})
+    logger.info(f"market_sell result: \n{item}")
+    return response.json(make_response(0, "OK", item))
 
 
 @bp_gm_adaptor.route("/batch_sell", methods=["POST"])

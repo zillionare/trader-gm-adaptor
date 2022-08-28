@@ -4,7 +4,6 @@
 import csv
 import datetime
 import logging
-import uuid
 from os import path
 from threading import Lock
 
