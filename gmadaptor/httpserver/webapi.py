@@ -88,7 +88,7 @@ async def bp_mock_buy(request):
         "volume": volume,
         "price": price,
         "order_side": OrderSide.BUY,
-        "order_type": OrderType.MARKET,
+        "order_type": OrderType.LIMIT,
         "cid": sid,
         "limit_price": 0,
     }
@@ -254,12 +254,12 @@ async def bp_mock_batch_sell(request):
         account_id, sell_info_list, timeout_in_ms
     )
     if result["status"] != 200:
-        logger.info(f"market_sell result: {result['msg']}")
+        logger.info(f"batch_sell result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
 
     # we can check result.status if this entrust success
     data = result["data"]
-    logger.info(f"market_sell result: \n{data}")
+    logger.info(f"batch_sell result: \n{data}")
     return response.json(make_response(0, "OK", data))
 
 
