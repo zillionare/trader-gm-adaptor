@@ -297,9 +297,7 @@ async def bp_mock_cancel_entrusts(request):
     account_id = request.headers.get("Account-ID")
     # 掘金文件单只支持SID关联委托，其他order id不可用
     sid_list = request.json.get("entrust_no")
-    logger.info(
-        "cancel_entrust: account->%s, entrust->%s, timeout->%d", account_id, sid_list
-    )
+    logger.info("cancel_entrust: account->%s, entrust->%s", account_id, sid_list)
 
     if not isinstance(sid_list, list) or len(sid_list) == 0:
         logger.info("cancel_entrusts: no entrust ID list provided")
