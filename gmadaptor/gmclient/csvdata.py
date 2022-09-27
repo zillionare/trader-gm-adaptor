@@ -72,7 +72,7 @@ class GMPosition:
     volume: int  # 总持仓量; 昨持仓量(volume-vol_today)
     vol_today: int  # 今日持仓量
     vwap: float  # 持仓均价
-    # vwap_dild: float    # 摊薄持仓均价
+    vwap_dild: float  # 摊薄持仓均价
     market_val: float  # 持仓市值
     price: float  # 当前行情价格
     fpnl: float  # 持仓浮动盈亏
@@ -90,6 +90,7 @@ class GMPosition:
         self.vol_today = safe_int(dict_data["volume_today(vol_today)"])
         # 持仓均价小数位数比较多，z trade server暂时不用
         self.vwap = safe_float(dict_data["vwap"])
+        self.vwap_dild = safe_float(dict_data["vwap_diluted(vwap_dild)"])
         self.market_val = safe_float(dict_data["market_value(market_val)"])
         self.price = safe_float(dict_data["price"])
         self.fpnl = safe_float(dict_data["fpnl"])
@@ -102,6 +103,7 @@ class GMPosition:
             "shares": self.volume,
             "sellable": self.avl_now + self.vol_today,  # 掘金可卖数量更新不及时，需要汇总
             "price": self.vwap,
+            "vwap_price": self.vwap_dild,
             "market_value": math_round(self.market_val, 2),
         }
 
