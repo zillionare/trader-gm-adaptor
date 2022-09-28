@@ -35,7 +35,7 @@ async def wrapper_get_balance(account_id: str):
         for row in csv.DictReader(csvfile):
             cash_in_csv = row
 
-    if not cash_in_csv:
+    if cash_in_csv is None:
         return {"status": 401, "msg": "no data in cash file"}
 
     acct_cash = {}
@@ -43,6 +43,7 @@ async def wrapper_get_balance(account_id: str):
         _data = GMCash(cash_in_csv)
         acct_cash = _data.toDict()
     except Exception as e:
+        logger.error("content of cash csv file: %s", cash_in_csv)
         logger.exception(e)
     return {"status": 200, "msg": "success", "data": acct_cash}
 
