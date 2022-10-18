@@ -187,7 +187,6 @@ class GMExecReport:
     order_id: str  # 委托柜台ID
     exec_id: str  # 委托回报ID
     symbol: str  # 证券代码(市场.代码)如:SZSE.000001
-    order_type: int  # 委托类型 参见
     order_side: int  # 委托业务属性 参见
     rej_reason: int  # 委托拒绝原因 参见
     rej_detail: str  # 委托拒绝原因描述
@@ -208,7 +207,6 @@ class GMExecReport:
         self.order_id = dict_data["order_id"]
         self.exec_id = dict_data["exec_id"]
         self.symbol = dict_data["symbol"]
-        self.order_type = safe_int(dict_data["order_type"])
         self.order_side = safe_int(dict_data["order_business(order_biz)"])
         self.rej_reason = safe_int(dict_data["ord_rej_reason(rej_reason)"])
         self.rej_detail = dict_data["ord_rej_reason_detail(rej_detail)"]
@@ -227,7 +225,6 @@ class GMExecReport:
             "code": self.symbol,
             "price": self.price,
             "filled": self.volume,
-            "order_type": self.order_type,
             "order_side": self.order_side,
             "status": self.exec_type,
             "date": self.recv_at.strftime("%Y-%m-%d %H:%M:%S.%f"),
