@@ -148,7 +148,9 @@ async def wrapper_trade_action(
     return {"status": 200, "msg": "success", "data": result_events}
 
 
-async def wrapper_cancel_entursts(account_id: str, sid_list: list):
+async def wrapper_cancel_entursts(
+    account_id: str, sid_list: list, timeout_in_ms: int = 1000
+):
     # 如果撤销操作失败，调用者得不到任何反馈，可以继续撤销，因此不用特殊处理各种异常情况
     if sid_list is None or (not isinstance(sid_list, list)):
         return {"status": 401, "msg": "only entrust list accepted"}
@@ -163,7 +165,9 @@ async def wrapper_cancel_entursts(account_id: str, sid_list: list):
         }
 
     # 从状态更新文件中读取撤销结果，字典数据
-    status_reports = await helper_get_order_status_changes(account_id, sid_added, 1000)
+    status_reports = await helper_get_order_status_changes(
+        account_id, sid_added, timeout_in_ms
+    )
     if not status_reports:
         return {
             "status": 500,

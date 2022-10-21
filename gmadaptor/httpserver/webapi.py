@@ -267,15 +267,24 @@ async def bp_mock_batch_sell(request):
 async def bp_mock_cancel_entrust(request):
     # 支持单个委托的撤销指令
     account_id = request.headers.get("Account-ID")
+
+    timeout = request.json.get("timeout")
+    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+
     # 掘金文件单只支持SID关联委托，其他order id不可用
     sid = request.json.get("entrust_no")
-    logger.info("cancel_entrust: account->%s, entrust->%s", account_id, sid)
+    logger.info(
+        "cancel_entrust: account->%s, entrust->%s, timeout->%d",
+        account_id,
+        sid,
+        timeout_in_ms,
+    )
 
     if sid is None or isinstance(sid, list):
         logger.info("cancel_entrust: only 1 entrust ID list accepted")
         return response.json(make_response(400, "only 1 entrust ID list accepted"))
 
-    result = await handler.wrapper_cancel_entursts(account_id, [sid])
+    result = await handler.wrapper_cancel_entursts(account_id, [sid], timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"cancel_entrust result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
@@ -295,15 +304,24 @@ async def bp_mock_cancel_entrust(request):
 async def bp_mock_cancel_entrusts(request):
     # 支持多个委托的撤销指令
     account_id = request.headers.get("Account-ID")
+
+    timeout = request.json.get("timeout")
+    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+
     # 掘金文件单只支持SID关联委托，其他order id不可用
     sid_list = request.json.get("entrust_no")
-    logger.info("cancel_entrust: account->%s, entrust->%s", account_id, sid_list)
+    logger.info(
+        "cancel_entrust: account->%s, entrust->%s, timeout->%d",
+        account_id,
+        sid_list,
+        timeout_in_ms,
+    )
 
     if not isinstance(sid_list, list) or len(sid_list) == 0:
         logger.info("cancel_entrusts: no entrust ID list provided")
         return response.json(make_response(400, "no entrust ID list provided"))
 
-    result = await handler.wrapper_cancel_entursts(account_id, sid_list)
+    result = await handler.wrapper_cancel_entursts(account_id, sid_list, timeout_in_ms)
     if result["status"] != 200:
         logger.info(f"cancel_entrust result: {result['msg']}")
         return response.json(make_response(-1, result["msg"]))
