@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import logging
 
 from sanic import Blueprint, Sanic, request, response
@@ -44,7 +45,13 @@ async def bp_mock_get_balance(request):
     result = await handler.wrapper_get_balance(account_id)
     if result["status"] != 200:
         logger.info(f"balance result: {result['msg']}")
-        return response.json(make_response(-1, result["msg"]))
+
+        # try again
+        await asyncio.sleep(1)
+        result = await handler.wrapper_get_balance(account_id)
+        if result["status"] != 200:
+            logger.info(f"balance result: {result['msg']}")
+            return response.json(make_response(-1, result["msg"]))
 
     logger.info(f"balance result: \n{result['data']}")
     return response.json(make_response(0, "OK", result["data"]))
