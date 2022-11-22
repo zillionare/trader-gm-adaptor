@@ -81,7 +81,7 @@ async def bp_mock_buy(request):
     volume = int(request.json.get("volume"))
     timeout = request.json.get("timeout")
     sid = request.json.get("cid", None)  # 关键参数
-    timeout_in_ms = calculate_timeout_in_ms(timeout, 2, 5)
+    timeout_in_ms = calculate_timeout_in_ms(timeout)
     logger.info(
         f"buy: code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
     )
@@ -130,7 +130,7 @@ async def bp_mock_market_buy(request):
     if limit_price is None:  # 尽量不用None传递参数
         limit_price = 0
     timeout = request.json.get("timeout")
-    timeout_in_ms = calculate_timeout_in_ms(timeout, 2, 5)
+    timeout_in_ms = calculate_timeout_in_ms(timeout, 1)
 
     logger.info(
         f"market_buy: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
@@ -170,7 +170,7 @@ async def bp_mock_sell(request):
         return response.json(make_response(-1, "parameter cannot be empty"))
 
     timeout = request.json.get("timeout")
-    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+    timeout_in_ms = calculate_timeout_in_ms(timeout)
     logger.info(
         f"sell: code->{symbol}, price->{price}, volume->{volume}, timeout->{timeout_in_ms}"
     )
@@ -213,7 +213,7 @@ async def bp_mock_market_sell(request):
     if limit_price is None:  # 尽量不用None传递参数
         limit_price = 0
     timeout = request.json.get("timeout")
-    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+    timeout_in_ms = calculate_timeout_in_ms(timeout, 1)
 
     logger.info(
         f"market_sell: code->{symbol}, volume->{volume}, price->{price}, limit_price->{limit_price}, timeout->{timeout_in_ms}"
@@ -253,7 +253,7 @@ async def bp_mock_batch_sell(request):
         return response.json(make_response(-1, "parameter is not array-like"))
 
     timeout = request.json.get("timeout")
-    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+    timeout_in_ms = calculate_timeout_in_ms(timeout, 1)
 
     logger.info(f"batch_sell: timeout->{timeout_in_ms}, info list->{sell_info_list}")
 
@@ -276,7 +276,7 @@ async def bp_mock_cancel_entrust(request):
     account_id = request.headers.get("Account-ID")
 
     timeout = request.json.get("timeout")
-    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+    timeout_in_ms = calculate_timeout_in_ms(timeout)
 
     # 掘金文件单只支持SID关联委托，其他order id不可用
     sid = request.json.get("entrust_no")
@@ -313,7 +313,7 @@ async def bp_mock_cancel_entrusts(request):
     account_id = request.headers.get("Account-ID")
 
     timeout = request.json.get("timeout")
-    timeout_in_ms = calculate_timeout_in_ms(timeout, 1, 2)
+    timeout_in_ms = calculate_timeout_in_ms(timeout, 1)
 
     # 掘金文件单只支持SID关联委托，其他order id不可用
     sid_list = request.json.get("entrust_no")
