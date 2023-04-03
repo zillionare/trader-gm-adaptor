@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 import logging
 import os
+import sys
 from logging.handlers import TimedRotatingFileHandler
-from os import path, sys
+from os import path
 
 import cfg4py
 from cfg4py.config import Config
@@ -14,13 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 def get_config_dir():
-    current_dir = os.getcwd()
-
     if cfg4py.envar in os.environ and os.environ[cfg4py.envar] == "DEV":
         module_dir = path.dirname(__file__)
         return path.normpath(path.join(module_dir, "config"))
     else:
-        return path.normpath(path.join(current_dir, "config"))
+        home = path.expanduser('~/gmadaptor')
+        return path.normpath(path.join(home, "config"))
 
 
 def init_config():
@@ -33,6 +33,7 @@ def init_config():
         print(e)
         os._exit(1)
 
+    ensure_folder_exists()
     return 0
 
 
@@ -71,6 +72,13 @@ def init_logger(filename: str, loglevel: int):
         handlers=[console, fh],
     )
 
+def ensure_folder_exists():
+    cfg = cfg4py.get_instance()
+    os.makedirs(os.path.expanduser(cfg.gm_info.gm_output), exist_ok=True)
+    
+    for account in cfg.gm_info.accounts:
+        _dir = os.path.expanduser(account["acct_input"])
+        os.makedirs(_dir, exist_ok=True)
 
 def start():
     current_dir = os.getcwd()
