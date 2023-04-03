@@ -31,4 +31,4 @@ def server_start(port: int = 9000) -> int:
     """
     initialize_blueprint(app)
     print("server initialized")
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, single_process=True)

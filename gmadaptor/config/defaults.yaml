@@ -7,7 +7,7 @@ server_info:
 
 gm_info:
     fake: false
-    gm_output: "/home/henry/zillionare/gm-client/FileOrders/out"
+    gm_output: "~/gmadaptor/FileOrders/out"
     trade_fees:
         commission: 2.5
         stamp_duty: 10.0
@@ -16,7 +16,7 @@ gm_info:
     accounts:
         - name: fileorder_s01
           acct_id: 1a66e81c-ae5d-11ec-aef5-00163e0a4100
-          acct_input: "/home/henry/zillionare/gm-client/FileOrders/inputs/fileorder_s01"
+          acct_input: "~/gmadaptor/FileOrders/inputs/fileorder_s01"
         - name: fileorder_r01
           acct_id: a751a30f-a4dd-11ec-ba99-00163e0a4100
-          acct_input: "/home/henry/zillionare/gm-client/FileOrders/inputs/fileorder_r01"
+          acct_input: "~/gmadaptor/FileOrders/inputs/fileorder_r01"

@@ -117,7 +117,7 @@ def gm_client_wrapper_start() -> int:
     gm_info = server_config.gm_info
 
     global gm_out_dir
-    gm_out_dir = gm_info.gm_output
+    gm_out_dir = os.path.expanduser(gm_info.gm_output)
     if not path.exists(gm_out_dir):
         logger.error("output folder of this gm client not found: %s", gm_out_dir)
         return -1
@@ -126,7 +126,7 @@ def gm_client_wrapper_start() -> int:
     for account in accounts:
         acct_name = account["name"]
         acct_id = account["acct_id"]
-        acct_input = account["acct_input"]
+        acct_input = os.path.expanduser(account["acct_input"])
         if not path.exists(acct_input):
             logger.fatal(
                 "input folder of account %s not found: %s",

@@ -18,7 +18,7 @@ bp_gm_adaptor = Blueprint("gmclient", strict_slashes=False)
 
 
 @bp_gm_adaptor.middleware("request")
-async def validate_request(request: request):
+async def validate_request(request):
     # check access_token first
     token = request.headers.get("Authorization")
     is_authenticated = check_request_token(token)
