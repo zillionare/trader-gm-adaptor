@@ -88,7 +88,7 @@ def start():
     server_config = cfg4py.get_instance()
 
     loglevel = server_config.log_level
-    log_dir = path.normpath(os.path.join(current_dir, "logs"))
+    log_dir = path.normpath(path.expanduser(server_config.log_dir))
     init_log_path(log_dir)
 
     logfile = path.normpath(path.join(log_dir, "server.log"))
