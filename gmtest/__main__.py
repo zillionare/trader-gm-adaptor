@@ -1,6 +1,5 @@
 # 本文件为冒烟测试
 import sys
-from email import header
 
 #!/usr/bin/env python
 """Tests for `gmtrader` package."""
@@ -39,7 +38,7 @@ def get_positions():
 
 def buy():
     r = httpx.post(_url_prefix + "buy", headers=headers, json={
-        "security": "000001.XSHE",
+        "security": "000572.XSHE",
         "price": 13,
         "volume": 100,
         "cid": str(uuid.uuid4()),

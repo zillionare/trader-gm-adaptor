@@ -23,6 +23,7 @@
   - [2.9. 取消委托](#29-取消委托)
   - [2.10. 查询当日委托](#210-查询当日委托)
 - [3. 故障排除与帮助](#3-故障排除与帮助)
+  - [撮合配置规则](#撮合配置规则)
 
 # 1. 安装与配置
 ## 1.1. 安装
@@ -121,7 +122,7 @@ python -m gmadaptor.server
 
 此时我们另开一个`conda`窗口，同样使用`gmclient`的虚拟环境，通过以下命令进行测试:
 ```
-python -m gmdemo.test run %account %token %server %port
+python -m gmtest %account %token %server %port
 ```
 
 这里的account即 gmadaptor配置文件中的 gm_info > accounts > account_id, token 即server_info > access_token
@@ -365,3 +366,34 @@ def today_entrusts():
 即使实现了EMC的每日自动重启，也有可能偶发连接异常或者其它错误。此时可能需要手动执行：
 1. 重新连接
 2. 清除文件单，重新启动
+
+## 撮合配置规则
+在仿真交易测试中，EMTrader对每个品种，都指定了对应的响应。比如，对000572这个品种，买入一定会全部成交，对000010这个品种，则一定会拒绝。这是为了方便测试的需要。东财提供了名为《撮合配置规则》的文件，该文件可能随时更新，所以，需要在测试前，加他们技术人员QQ领取。
+
+该文件2023年3月份部分内容如下：
+```
+[全部成交]
+000572	full
+000725	full
+
+[分笔成交] 
+分成两笔：
+000002	lot      	2
+
+[部分成交] 成交一半
+000001	part
+000004	part
+...
+[挂单]	只有响应，没有成交
+018014	pending
+020417	pending
+...
+
+[拒单]	
+000010	reject
+010609	reject
+
+[拒绝撤单] 部分成交，不可撤单
+000008	cancel_reject
+000151	cancel_reject
+```
