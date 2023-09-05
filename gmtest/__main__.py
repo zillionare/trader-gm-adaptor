@@ -1,5 +1,6 @@
 # 本文件为冒烟测试
 import sys
+import time
 
 #!/usr/bin/env python
 """Tests for `gmtrader` package."""
@@ -7,16 +8,13 @@ import sys
 
 import sys
 import uuid
+from typing import Optional
 
 import httpx
 
-cid = str(uuid.uuid4())
-buy_entrust_no = None
-sell_entrust_no = None
-
 headers = {
     "Authorization": "84ae0899-7a8d-44ff-9983-4fa7cbbc424b",
-    "Account-ID": "780dc4fda3d0af8a2d3ab0279bfa48c9"
+    "Account-ID": "eee2dcd849adafb04ac1981378b45e05"
 }
 
 _url_prefix = "http://192.168.100.100:9000/"
@@ -36,22 +34,24 @@ def get_positions():
         print("\n----- 持仓信息 ------")
         print(resp["data"])
 
-def buy():
+def buy(code: Optional[str]=None):
+    cid = str(uuid.uuid4())
     r = httpx.post(_url_prefix + "buy", headers=headers, json={
-        "security": "000572.XSHE",
+        "security": code or "000572.XSHE",
         "price": 13,
         "volume": 100,
-        "cid": str(uuid.uuid4()),
+        "cid": cid,
         "timeout": 1
     })
 
     print("\n------ 限价委买 ------")
     print(r.json())
+    return cid
 
 def market_buy():
-    global buy_entrust_no
+    cid = str(uuid.uuid4())
     r = httpx.post(_url_prefix + "market_buy", headers=headers, json={
-        "security": "000001.XSHE",
+        "security": "000572.XSHE",
         "volume": 100,
         "cid": cid,
         "timeout": 1
@@ -62,12 +62,23 @@ def market_buy():
         print("\n------ 市价委买成功 ------")
         print(resp["status"], resp["msg"], resp["data"])
         buy_entrust_no = resp["data"]["entrust_no"]
+        assert cid == buy_entrust_no
+        print(f"等待两秒，查询买入是否成功。")
+        time.sleep(2)
+        
+        r = httpx.post(_url_prefix + "today_entrusts", headers=headers, json = {
+            "entrust_no": [cid],
+            "timeout": 1
+        })
+
+        resp = r.json()
+        print(resp)
     else:
         print("\n------ 市价委买失败 ------", r.status_code, resp)
 
 
 def sell():
-    global sell_entrust_no
+    cid = str(uuid.uuid4())
 
     r = httpx.post(_url_prefix + "sell", headers=headers, json={
         "security": "000001.XSHE",
@@ -87,6 +98,7 @@ def sell():
         print("\n------ 卖出失败 ------", r.status_code, resp)
 
 def market_sell():
+    cid = str(uuid.uuid4())
     r = httpx.post(_url_prefix + "market_sell", headers=headers, json = {
         "security": "000001.XSHE",
         "volume": 100,
@@ -101,10 +113,10 @@ def market_sell():
         print(resp)
 
 def cancel_entrust():
-    global buy_entrust_no
+    cid = buy("018014.XSHE")
 
     r = httpx.post(_url_prefix + "cancel_entrust", headers=headers, json = {
-        "entrust_no": buy_entrust_no,
+        "entrust_no": cid,
         "timeout": 1
     })
 
